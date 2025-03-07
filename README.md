@@ -1,13 +1,14 @@
 [![release](https://img.shields.io/github/v/release/Solid-Energy-Systems/NewareNDA)](https://github.com/Solid-Energy-Systems/NewareNDA/releases)
-[![NewareNDA regression tests](https://github.com/Solid-Energy-Systems/NewareNDA/actions/workflows/NewareNDA_pytest.yml/badge.svg)](https://github.com/Solid-Energy-Systems/NewareNDA/actions/workflows/NewareNDA_pytest.yml)
-[![Coverage Status](https://coveralls.io/repos/github/Solid-Energy-Systems/NewareNDA/badge.svg?branch=development)](https://coveralls.io/github/Solid-Energy-Systems/NewareNDA?branch=development)
+[![NewareNDA regression tests](https://github.com/d-cogswell/NewareNDA/actions/workflows/NewareNDA_pytest.yml/badge.svg)](https://github.com/d-cogswell/NewareNDA/actions/workflows/NewareNDA_pytest.yml)
+[![Coverage Status](https://coveralls.io/repos/github/d-cogswell/NewareNDA/badge.svg?branch=development)](https://coveralls.io/github/d-cogswell/NewareNDA?branch=development)
 # NewareNDA
 
 © 2022-2024 Copyright SES AI
 <br>Author: Daniel Cogswell
-<br>Email: danielcogswell@ses.ai
 
 Python module and command line tool for reading and converting Neware nda and ndax battery cycling files. Auxiliary temperature fields are currently supported in both formats.
+
+This repository is a fork for independent development of the [original NewareNDA project](https://github.com/Solid-Energy-Systems/NewareNDA).
 
 # Installation
 To install the latest version from the PyPi package repository:
@@ -17,7 +18,7 @@ pip install --upgrade NewareNDA
 
 To install the development branch directly from Github:
 ```
-pip install git+https://github.com/Solid-Energy-Systems/NewareNDA.git@development
+pip install git+https://github.com/d-cogswell/NewareNDA.git@development
 ```
 
 To install from source, clone this repository and run:
