@@ -1,4 +1,4 @@
-[![release](https://img.shields.io/github/v/release/Solid-Energy-Systems/NewareNDA)](https://github.com/Solid-Energy-Systems/NewareNDA/releases)
+[![release](https://img.shields.io/github/v/release/d-cogswell/NewareNDA)](https://github.com/d-cogswell/NewareNDA/releases)
 [![NewareNDA regression tests](https://github.com/d-cogswell/NewareNDA/actions/workflows/NewareNDA_pytest.yml/badge.svg)](https://github.com/d-cogswell/NewareNDA/actions/workflows/NewareNDA_pytest.yml)
 [![Coverage Status](https://coveralls.io/repos/github/d-cogswell/NewareNDA/badge.svg?branch=development)](https://coveralls.io/github/d-cogswell/NewareNDA?branch=development)
 # NewareNDA
