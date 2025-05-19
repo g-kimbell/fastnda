@@ -95,10 +95,42 @@ def read_ndax(file, software_cycle_number=False, cycle_mode='chg'):
             data_df['Step'] = data_df['Step'].ffill()
             data_df = data_df.merge(step_df, how='left', on='Step').reindex(
                 columns=rec_columns)
+            rec_time_steps = None
+            if 'Step.xml' in zf.namelist():
+                try:
+                    rec_time_steps: dict[int, float] = {}
+
+                    # Read the XML file
+                    xml_str = zf.read('Step.xml').decode('gb2312')
+                    root = ET.fromstring(xml_str)
+
+                    # Get time record step for each step
+                    step_info = root.find('config/Step_Info')
+                    for step_elem in step_info:
+                        step_id = int(step_elem.attrib.get('Step_ID'))
+                        time_elem = step_elem.find('Record/Main/Time')
+                        if time_elem is not None:
+                            time_value = float(time_elem.attrib.get('Value'))/1000  # ms -> s
+                            if step_id and time_value:
+                                rec_time_steps[step_id] = time_value
+
+                    # Find whole protocol time record step, use key 0
+                    protocol_time = root.find('config/Whole_Prt/Record/Main/Time')
+                    if protocol_time is not None:
+                        time_value = float(protocol_time.attrib.get('Value'))/1000
+                        rec_time_steps[0] = time_value
+
+                        # The actual time step is the minimum of whole protocol and individual step
+                        rec_time_steps = {
+                            k: min(v, time_value) for k, v in rec_time_steps.items()
+                        }
+                except (ValueError, KeyError, TypeError, ET.ParseError) as e:
+                    msg = f'Error trying to read Step.xml: {e}. Interpolation may not be accurate.'
+                    logger.warning(msg)
 
             # Fill in missing data - Neware appears to fabricate data
             if data_df.isnull().any(axis=None):
-                _data_interpolation(data_df)
+                _data_interpolation(data_df, rec_time_steps)
 
         # Read and merge Aux data from ndc files
         aux_df = pd.DataFrame([])
@@ -132,35 +164,56 @@ def read_ndax(file, software_cycle_number=False, cycle_mode='chg'):
     return data_df.astype(dtype=dtype_dict)
 
 
-def _data_interpolation(df):
+def _data_interpolation(df, rec_time_steps: dict[int, float] | None = None):
     """
     Some ndax from from BTS Server 8 do not seem to contain a complete dataset.
     This helper function fills in missing times, capacities, and energies.
     """
-    logger.warning("IMPORTANT: This ndax has missing data. The output from "
-                   "NewareNDA contains interpolated data!")
+    # Fill missing times using rec_time_steps, found from Step.xml
+    if rec_time_steps is not None:
+        logger.warning("IMPORTANT: This ndax has missing data. The output from "
+                   "NewareNDA contains interpolated data based on the Step.xml!")
+        # Create a map of dt (s) values for each step index
+        dt = df['Step_Index'].map(rec_time_steps)
+        whole_protocol_dt = rec_time_steps.get(0)
+        if whole_protocol_dt is not None:
+            dt = dt.fillna(whole_protocol_dt)
 
-    # Identify the valid data
-    nan_mask = df['Time'].notnull()
+        # Add dt increments to missing Time values, round down to nearest dt
+        nan_mask = df['Time'].notna() | dt.isna()
+        time_inc = dt.groupby(nan_mask.cumsum()).cumsum().shift(1)
+        time_ffilled = df['Time'].ffill()
+        df['Time'] = time_ffilled.where(nan_mask, (time_ffilled+time_inc) // dt * dt)
+        # Fill missing timestamps based on new Time values
+        # Recalculate time_inc as some might get rounded down
+        time_inc = df['Time']-time_ffilled
+        df['Timestamp'] = (
+            df['Timestamp'].ffill() + pd.to_timedelta(time_inc.fillna(0), unit='s')
+        )
 
-    # Group by step and run 'inside' interpolation on Time
-    df['Time'] = df.groupby('Step')['Time'].transform(
-        lambda x: pd.Series.interpolate(x, limit_area='inside'))
-    df['Timestamp'] = df.groupby('Step')['Timestamp'].transform(
-        lambda x: pd.Series.interpolate(x, limit_area='inside'))
+    # If there are remaining missing times, fill them with best guess (linear interpolation)
+    nan_mask = df['Time'].notna()
+    if any(~nan_mask):
+        logger.warning("IMPORTANT: This ndax has missing data. The output from "
+                   "NewareNDA contains interpolated data using linear interpolation!")
+        # Group by step and run 'inside' interpolation on Time
+        df['Time'] = df.groupby('Step')['Time'].transform(
+            lambda x: pd.Series.interpolate(x, limit_area='inside'))
+        df['Timestamp'] = df.groupby('Step')['Timestamp'].transform(
+            lambda x: pd.Series.interpolate(x, limit_area='inside'))
 
-    # Perform extrapolation to generate the remaining missing Time
-    nan_mask2 = df['Time'].notnull()
-    time_inc = df['Time'].diff().ffill().groupby(nan_mask2.cumsum()).cumsum()
-    time = df['Time'].ffill() + time_inc.shift()
-    df['Time'] = df['Time'].where(nan_mask2, time)
+        # Perform extrapolation to generate the remaining missing Time
+        time_inc = df['Time'].diff().ffill().groupby(nan_mask.cumsum()).cumsum()
+        time = df['Time'].ffill() + time_inc.shift()
+        df['Time'] = df['Time'].where(nan_mask, time)
 
-    # Fill in missing Timestamps
-    time_inc = df['Timestamp'].diff().ffill().groupby(nan_mask2.cumsum()).cumsum()
-    timestamp = df['Timestamp'].ffill() + time_inc.shift()
-    df['Timestamp'] = df['Timestamp'].where(nan_mask2, timestamp)
+        # Fill in missing Timestamps
+        time_inc = df['Timestamp'].diff().ffill().groupby(nan_mask.cumsum()).cumsum()
+        timestamp = df['Timestamp'].ffill() + time_inc.shift()
+        df['Timestamp'] = df['Timestamp'].where(nan_mask, timestamp)
 
     # Integrate to get capacity and fill missing values
+    nan_mask = df['Charge_Capacity(mAh)'].notna()
     capacity = df['Time'].diff()*abs(df['Current(mA)'])/3600
     inc = capacity.groupby(nan_mask.cumsum()).cumsum()
     chg = df['Charge_Capacity(mAh)'].ffill() + \
