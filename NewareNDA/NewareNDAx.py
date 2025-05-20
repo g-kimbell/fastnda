@@ -110,14 +110,16 @@ def read_ndax(file, software_cycle_number=False, cycle_mode='chg'):
                         step_id = int(step_elem.attrib.get('Step_ID'))
                         time_elem = step_elem.find('Record/Main/Time')
                         if time_elem is not None:
-                            time_value = float(time_elem.attrib.get('Value'))/1000  # ms -> s
+                            time_value = int(time_elem.attrib.get('Value'))  # ms
+                            time_value = -(-time_value // 100) / 10  # s rounded up to nearest 0.1
                             if step_id and time_value:
                                 rec_time_steps[step_id] = time_value
 
                     # Find whole protocol time record step, use key 0
                     protocol_time = root.find('config/Whole_Prt/Record/Main/Time')
                     if protocol_time is not None:
-                        time_value = float(protocol_time.attrib.get('Value'))/1000
+                        time_value = int(protocol_time.attrib.get('Value'))  # ms
+                        time_value = -(-time_value // 100) / 10  # s rounded up to nearest 0.1
                         rec_time_steps[0] = time_value
 
                         # The actual time step is the minimum of whole protocol and individual step
