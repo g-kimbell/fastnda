@@ -9,6 +9,7 @@ import logging
 import tempfile
 import zipfile
 import re
+import numpy as np
 from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
 import pandas as pd
@@ -185,7 +186,9 @@ def _data_interpolation(df, rec_time_steps: dict[int, float] | None = None):
         nan_mask = df['Time'].notna() | dt.isna()
         time_inc = dt.groupby(nan_mask.cumsum()).cumsum().shift(1)
         time_ffilled = df['Time'].ffill()
-        df['Time'] = time_ffilled.where(nan_mask, (time_ffilled+time_inc) // dt * dt)
+        # Round down to nearest dt - needs rounding and flooring to avoid floating point errors
+        # Errors start showing up at ~14 decimal places
+        df['Time'] = time_ffilled.where(nan_mask, np.floor(round((time_ffilled+time_inc)/dt,10))*dt)
         # Fill missing timestamps based on new Time values
         # Recalculate time_inc as some might get rounded down
         time_inc = df['Time']-time_ffilled
