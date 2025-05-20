@@ -95,7 +95,7 @@ def read_ndax(file, software_cycle_number=False, cycle_mode='chg'):
             data_df = data_df.merge(runInfo_df, how='left', on='Index')
             data_df['Step'] = data_df['Step'].ffill()
             data_df = data_df.merge(step_df, how='left', on='Step').reindex(
-                columns=rec_columns)
+                columns=rec_columns + ['Step_Index'])
             rec_time_steps = None
             if 'Step.xml' in zf.namelist():
                 try:
