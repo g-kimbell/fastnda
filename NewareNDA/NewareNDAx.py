@@ -113,20 +113,22 @@ def read_ndax(file, software_cycle_number=False, cycle_mode='chg'):
                         if time_elem is not None:
                             time_value = int(time_elem.attrib.get('Value'))  # ms
                             time_value = -(-time_value // 100) / 10  # s rounded up to nearest 0.1
-                            if step_id and time_value:
-                                rec_time_steps[step_id] = time_value
+                            rec_time_steps[step_id] = time_value
+                        else:
+                            rec_time_steps[step_id] = None
 
-                    # Find whole protocol time record step, use key 0
+                    # If there is a global measurement time, apply it to all steps
                     protocol_time = root.find('config/Whole_Prt/Record/Main/Time')
                     if protocol_time is not None:
                         time_value = int(protocol_time.attrib.get('Value'))  # ms
                         time_value = -(-time_value // 100) / 10  # s rounded up to nearest 0.1
-                        rec_time_steps[0] = time_value
-
-                        # The actual time step is the minimum of whole protocol and individual step
                         rec_time_steps = {
-                            k: min(v, time_value) for k, v in rec_time_steps.items()
+                            k: time_value if v is None else min(v, time_value)
+                            for k, v in rec_time_steps.items()
                         }
+                    else:  # Remove steps without a time value
+                        rec_time_steps = {k: v for k, v in rec_time_steps.items() if v is not None}
+
                 except (ValueError, KeyError, TypeError, ET.ParseError) as e:
                     msg = f'Error trying to read Step.xml: {e}. Interpolation may not be accurate.'
                     logger.warning(msg)
@@ -134,6 +136,7 @@ def read_ndax(file, software_cycle_number=False, cycle_mode='chg'):
             # Fill in missing data - Neware appears to fabricate data
             if data_df.isnull().any(axis=None):
                 _data_interpolation(data_df, rec_time_steps)
+            data_df.drop(columns=['Step_Index'], inplace=True)
 
         # Read and merge Aux data from ndc files
         aux_df = pd.DataFrame([])
@@ -173,14 +176,14 @@ def _data_interpolation(df, rec_time_steps: dict[int, float] | None = None):
     This helper function fills in missing times, capacities, and energies.
     """
     # Fill missing times using rec_time_steps, found from Step.xml
-    if rec_time_steps is not None:
+    if any(df['Step_Index'] > 10000):
+        msg = "Could not interpret Step_Index from ndc file. "
+        logger.warning(msg)
+    elif rec_time_steps:
         logger.warning("IMPORTANT: This ndax has missing data. The output from "
                    "NewareNDA contains interpolated data based on the Step.xml!")
         # Create a map of dt (s) values for each step index
         dt = df['Step_Index'].map(rec_time_steps)
-        whole_protocol_dt = rec_time_steps.get(0)
-        if whole_protocol_dt is not None:
-            dt = dt.fillna(whole_protocol_dt)
 
         # Add dt increments to missing Time values, round down to nearest dt
         nan_mask = df['Time'].notna() | dt.isna()
@@ -188,12 +191,13 @@ def _data_interpolation(df, rec_time_steps: dict[int, float] | None = None):
         time_ffilled = df['Time'].ffill()
         # Round down to nearest dt - needs rounding and flooring to avoid floating point errors
         # Errors start showing up at ~14 decimal places
-        df['Time'] = time_ffilled.where(nan_mask, np.floor(round((time_ffilled+time_inc)/dt,10))*dt)
+        df['Time'] = df['Time'].where(nan_mask, np.floor(round((time_ffilled+time_inc)/dt,10))*dt)
         # Fill missing timestamps based on new Time values
         # Recalculate time_inc as some might get rounded down
         time_inc = df['Time']-time_ffilled
-        df['Timestamp'] = (
-            df['Timestamp'].ffill() + pd.to_timedelta(time_inc.fillna(0), unit='s')
+        df['Timestamp'] = df['Timestamp'].where(
+            nan_mask,
+            df['Timestamp'].ffill() + pd.to_timedelta(time_inc.fillna(0), unit='s'),
         )
 
     # If there are remaining missing times, fill them with best guess (linear interpolation)
@@ -208,6 +212,7 @@ def _data_interpolation(df, rec_time_steps: dict[int, float] | None = None):
             lambda x: pd.Series.interpolate(x, limit_area='inside'))
 
         # Perform extrapolation to generate the remaining missing Time
+        nan_mask = df['Time'].notna()
         time_inc = df['Time'].diff().ffill().groupby(nan_mask.cumsum()).cumsum()
         time = df['Time'].ffill() + time_inc.shift()
         df['Time'] = df['Time'].where(nan_mask, time)
