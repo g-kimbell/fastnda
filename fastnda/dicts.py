@@ -1,46 +1,45 @@
-import polars as pl
+"""Definitions used in data processing."""
 
-# Names for data fields
-rec_columns = [
-    'Index', 'Cycle', 'Step', 'Status', 'Time', 'Voltage',
-    'Current(mA)', 'Charge_Capacity(mAh)', 'Discharge_Capacity(mAh)',
-    'Charge_Energy(mWh)', 'Discharge_Energy(mWh)', 'Timestamp']
+import polars as pl
 
 # Dictionary mapping Status integer to string
 state_dict = {
-    1: 'CC_Chg',
-    2: 'CC_DChg',
-    3: 'CV_Chg',
-    4: 'Rest',
-    5: 'Cycle',
-    7: 'CCCV_Chg',
-    8: 'CP_DChg',
-    9: 'CP_Chg',
-    10: 'CR_DChg',
-    13: 'Pause',
-    16: 'Pulse',
-    17: 'SIM',
-    19: 'CV_DChg',
-    20: 'CCCV_DChg',
-    21: 'Control',
-    22: 'OCV',
-    26: 'CPCV_DChg',
-    27: 'CPCV_Chg'
+    1: "CC_Chg",
+    2: "CC_DChg",
+    3: "CV_Chg",
+    4: "Rest",
+    5: "cycle_count",
+    7: "CCCV_Chg",
+    8: "CP_DChg",
+    9: "CP_Chg",
+    10: "CR_DChg",
+    13: "Pause",
+    16: "Pulse",
+    17: "SIM",
+    19: "CV_DChg",
+    20: "CCCV_DChg",
+    21: "Control",
+    22: "OCV",
+    26: "CPCV_DChg",
+    27: "CPCV_Chg",
 }
 
-# Define precision of fields
+# Define fields and their data types (not aux)
 dtype_dict = {
-    'Index': pl.UInt32,
-    'Cycle': pl.UInt32,
-    'Step': pl.UInt32,
-    'Status': pl.Enum(state_dict.values()),
-    'Time': pl.Float32,
-    'Voltage': pl.Float32,
-    'Current(mA)': pl.Float32,
-    'Charge_Capacity(mAh)': pl.Float32,
-    'Discharge_Capacity(mAh)': pl.Float32,
-    'Charge_Energy(mWh)': pl.Float32,
-    'Discharge_Energy(mWh)': pl.Float32,
+    "index": pl.UInt32,
+    "voltage_V": pl.Float32,
+    "current_mA": pl.Float32,
+    "unix_time_s": pl.UInt64,
+    "step_time_s": pl.Float32,
+    "timestamp": pl.Datetime("us", time_zone="UTC"),
+    "cycle_count": pl.UInt32,
+    "step_count": pl.UInt32,
+    "step_index": pl.UInt32,
+    "status": pl.Enum(state_dict.values()),
+    "charge_capacity_mAh": pl.Float32,
+    "discharge_capacity_mAh": pl.Float32,
+    "charge_energy_mWh": pl.Float32,
+    "discharge_energy_mWh": pl.Float32,
 }
 
 
@@ -76,6 +75,7 @@ multiplier_dict = {
     5: 1e-4,
     10: 1e-3,
     20: 1e-3,
+    25: 1e-3,
     50: 1e-3,
     100: 1e-2,
     200: 1e-2,
@@ -96,7 +96,7 @@ multiplier_dict = {
 
 # Renaming aux columns by ChlType
 aux_chl_type_columns = {
-    103: "T",
-    335: "t",
-    345: "H",
+    103: "temperature_degC",
+    335: "temperature_setpoint_degC",
+    345: "humidity_%",
 }
