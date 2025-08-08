@@ -1,36 +1,65 @@
-# © 2022-2024 Copyright SES AI
-# Author: Daniel Cogswell
-
 [project]
-name = "NewareNDA"
+name = "FastNDA"
 dynamic = ["version"]
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
-readme = { file = "README.md", content-type = "text/markdown" }
-authors = [{ name = "Dan Cogswell", email = "cogswell@alum.mit.edu" }]
-requires-python = ">=3.6"
+readme = "README.md"
+requires-python = ">=3.10"
 classifiers = [ "Programming Language :: Python :: 3" ]
-description = "Neware nda binary file reader."
+description = "Read Neware nda and ndax files fast."
 dependencies = [
-  "pandas>=2",
-  "polars",
-  "pyarrow",
-  "importlib-metadata ~= 1.0 ; python_version < '3.8'"
+    "defusedxml>=0.7.1",
+    "numpy>=2.2.6",
+    "pandas>=2.3.1",
+    "polars>=1.32.2",
 ]
 
-[tool.setuptools.dynamic]
-version = { attr = "NewareNDA.version.__version__" }
+[dependency-groups]
+dev = [
+    "bumpver>=2025.1131",
+    "pre-commit>=4.2.0",
+    "pytest>=8.4.1",
+    "ruff>=0.12.8",
+]
 
-[project.scripts]
-NewareNDA-cli = "NewareNDA.__main__:main"
+[tool.ruff]
+line-length = 120
+lint.select = ["ALL"]
+lint.ignore = [
+    "N806",
+    "T201",
+    "FA102",
+    "PD901",
+    "FBT001",
+    "FBT002",
+    "PLR2004",
+    "TD002",
+    "TD003",
+    "D203",
+    "D213",
+    "COM812",
+]
+fix = true
 
-[project.urls]
-homepage = "https://github.com/d-cogswell/NewareNDA"
-tracker = "https://github.com/d-cogswell/NewareNDA/issues"
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/*.py" = [
+    "S101", # asserts allowed in tests
+    "PT011", # allow just checking for ValueError without match
+]
 
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+[tool.bumpver]
+current_version = "v0.1.0"
+version_pattern = "vMAJOR.MINOR.PATCH[PYTAGNUM]"
+commit_message = "Bump version {old_version} -> {new_version}."
+tag_message = "Release {new_version}."
+tag_scope = "default"
+pre_commit_hook = ""
+post_commit_hook = ""
+commit = true
+tag = true
+push = true
 
-[project.optional-dependencies]
-test = ["pytest", "pyarrow", "coveralls"]
+[tool.bumpver.file_patterns]
+"fastnda/version.py" = [
+    '__version__ = "{pep440_version}"',
+]

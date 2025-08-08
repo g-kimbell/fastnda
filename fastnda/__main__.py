@@ -5,7 +5,7 @@ output format is csv. Other formats may require installing additional packages.
 import argparse
 from logging import _nameToLevel
 import pandas as pd
-import NewareNDA
+import fastnda
 
 
 def main():
@@ -28,14 +28,14 @@ def main():
     parser.add_argument('-s', '--no_software_cycle_number', action='store_false',
                         help='Generate the cycle number field to match old versions of BTSDA.')
     parser.add_argument('-v', '--version', help='show version',
-                        action='version', version=NewareNDA.__version__)
+                        action='version', version=fastnda.__version__)
     parser.add_argument('-l', '--log_level', choices=list(_nameToLevel.keys()), default='INFO',
                         help='Set the logging level for NewareNDA')
     parser.add_argument('-c', '--cycle_mode', choices=['chg', 'dchg', 'auto'], default='chg',
                         help='Selects how the cycle is incremented.')
     args = parser.parse_args()
 
-    df = NewareNDA.read(args.in_file, args.no_software_cycle_number, cycle_mode=args.cycle_mode, log_level=args.log_level)
+    df = fastnda.read(args.in_file, args.no_software_cycle_number, cycle_mode=args.cycle_mode, log_level=args.log_level)
     output_cmd[args.format](df, args.out_file)
 
 
