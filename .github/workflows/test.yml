@@ -1,0 +1,42 @@
+# Install Python and project, lint, run pytest
+
+name: Pytest
+
+on:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "*" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.13"
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+    
+      - name: Install
+        run: |
+          uv pip install ruff pytest pytest-cov
+          uv pip install -e .
+      - name: Lint with ruff
+        run: |
+          ruff check --select=F,E9,B
+  
+      - name: Test with pytest
+        run: |
+          pytest --cov=fastnda --cov-report=term
