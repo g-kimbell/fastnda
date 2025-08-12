@@ -83,5 +83,7 @@ def btsda_csv_to_parquet(csv_file: str | Path, out_file: str | Path | None = Non
     df = df.rename({"Current(µA)": "Current(uA)"})
     df = df.select(list(dtypes.keys()))
     df = df.cast(dtypes)
-    df.write_parquet(out_file)
+    # Brotli seems to have best file size, we don't care about speed
+    # Trying to keep repo small with lots of test data
+    df.write_parquet(out_file, compression="brotli", compression_level=11)
     return df
