@@ -276,7 +276,7 @@ def _read_ndc_2_filetype_1(buf: bytes) -> pl.DataFrame:
         .with_columns(
             [
                 pl.col("cycle_count") + 1,
-                pl.col("step_time_s").cast(pl.Float32) * 1e-3,
+                pl.col("step_time_s").cast(pl.Float64) * 1e-3,
                 pl.col("voltage_V").cast(pl.Float32) * 1e-4,
                 pl.col("range").replace_strict(multiplier_dict, return_dtype=pl.Float64).alias("multiplier"),
                 pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
@@ -354,7 +354,7 @@ def _read_ndc_5_filetype_1(buf: bytes) -> pl.DataFrame:
         .with_columns(
             [
                 pl.col("cycle_count") + 1,
-                pl.col("step_time_s").cast(pl.Float32) * 1e-3,
+                pl.col("step_time_s").cast(pl.Float64) * 1e-3,
                 pl.col("voltage_V").cast(pl.Float32) * 1e-4,
                 pl.col("range").replace_strict(multiplier_dict, return_dtype=pl.Float64).alias("multiplier"),
                 pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
@@ -496,7 +496,7 @@ def _read_ndc_11_filetype_18(buf: bytes) -> pl.DataFrame:
         _bytes_to_df(buf, dtype, 132, 16)
         .with_columns(
             [
-                pl.col("step_time_s", "dt").cast(pl.Float32) / 1000,  # Division in 32-bit
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,  # Division in 32-bit
                 pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
                 / 3600,  # mAs|mWs -> mAh|mWh
                 (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
@@ -574,7 +574,7 @@ def _read_ndc_14_filetype_18(buf: bytes) -> pl.DataFrame:
         _bytes_to_df(buf, dtype, 132, 4)
         .with_columns(
             [
-                pl.col("step_time_s", "dt").cast(pl.Float32) / 1000,  # ms -> s
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,  # ms -> s
                 pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
                 * 1000,  # Ah|Wh -> mAh|mWh
                 (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
@@ -631,7 +631,7 @@ def _read_ndc_17_filetype_18(buf: bytes) -> pl.DataFrame:
         _bytes_to_df(buf, dtype, 132, 64)
         .with_columns(
             [
-                pl.col("step_time_s", "dt").cast(pl.Float32) / 1000,
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,
                 (
                     pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
                     * 1000
