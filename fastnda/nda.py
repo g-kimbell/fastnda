@@ -187,10 +187,11 @@ def _read_nda_29(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
                 (
                     pl.col(
                         ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"],
-                    )
-                    * pl.col("multiplier")
+                    ).cast(pl.Float64)
+                    * pl.col("multiplier").cast(pl.Float64)
                     / 3600
                 ).cast(pl.Float32),
+                (pl.col("timestamp").cast(pl.Float64) * 1e-6).alias("unix_time_s"),
             ]
         )
         .drop(["Y", "M", "D", "h", "m", "s", "multiplier", "range"])
