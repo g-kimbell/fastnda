@@ -132,7 +132,7 @@ def read_metadata(zf: zipfile.ZipFile) -> dict[str, str | float]:
     try:
         version_info = zf.read("VersionInfo.xml").decode("gb2312")
         config = ElementTree.fromstring(version_info).find("config/ZwjVersion")
-        if config:
+        if config is not None:
             metadata["Server version"] = config.attrib["SvrVer"]
             metadata["Client version"] = config.attrib["CurrClientVer"]
             metadata["Control unit version"] = config.attrib["ZwjVersion"]
@@ -144,7 +144,7 @@ def read_metadata(zf: zipfile.ZipFile) -> dict[str, str | float]:
     try:
         step = zf.read("Step.xml").decode("gb2312")
         scq = ElementTree.fromstring(step).find("config/Head_Info/SCQ")
-        if scq:
+        if scq is not None:
             active_mass = float(scq.attrib["Value"])
             metadata["Active mass"] = active_mass / 1000
     except Exception:
