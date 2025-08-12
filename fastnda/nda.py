@@ -44,11 +44,14 @@ def read_nda(file: str | Path) -> tuple[pl.DataFrame, dict[str, str | float]]:
 
         # version specific settings
         if metadata["nda_version"] == 29:
+            logger.info("Reading nda version 29")
             df, aux_df = _read_nda_29(mm)
         elif metadata["nda_version"] == 130:
             if mm[1024:1025] == b"\x55":  # It is BTS 9.1
+                logger.info("Reading nda version 130 BTS9.1")
                 df, aux_df = _read_nda_130_91(mm)
             else:
+                logger.info("Reading nda version 130 BTS9.0")
                 df, aux_df = _read_nda_130_90(mm)
         else:
             msg = f"nda version {metadata['nda_version']} is not yet supported!"

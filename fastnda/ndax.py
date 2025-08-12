@@ -236,11 +236,11 @@ def read_ndc(buf: bytes) -> pl.DataFrame:
     # Get ndc file version and filetype
     ndc_filetype = int(buf[0])
     ndc_version = int(buf[2])
-    logger.debug("NDC version: %d filetype: %d", ndc_version, ndc_filetype)
     reader = NDC_READERS.get((ndc_version, ndc_filetype))
     if reader is None:
         msg = f"ndc version {ndc_version} filetype {ndc_filetype} is not yet supported!"
         raise NotImplementedError(msg) from None
+    logger.info("Reading ndc version %d filetype %d", ndc_version, ndc_filetype)
     return reader(buf)
 
 
