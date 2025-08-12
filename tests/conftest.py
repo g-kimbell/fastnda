@@ -1,5 +1,6 @@
 """Default to tests/test_data, allow users to change test data folder."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,14 @@ def data_dir(request: pytest.FixtureRequest) -> Path:
     return path
 
 
+def _remove_extension(filename: str) -> str:
+    """Remove file extension from filename.
+
+    Required as filepath.stem would only remove zip from .ndax.zip.
+    """
+    return re.sub(r"\.(ndax|nda|parquet|nda\.zip)$", "", filename, flags=re.IGNORECASE)
+
+
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Find matching pairs of files."""
     data_dir = Path(metafunc.config.getoption("--data-dir"))
@@ -39,8 +48,15 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         data_dir = Path(metafunc.config.getoption("--data-dir"))
 
         # Find all pairs of .ndax and .parquet files with matching stem
-        inputs = {f.stem: f for f in (*data_dir.rglob("*.ndax"), *data_dir.rglob("*.nda"))}
-        outputs = {f.stem: f for f in data_dir.rglob("*.parquet")}
+        inputs = {
+            _remove_extension(f.name): f
+            for f in (
+                *data_dir.rglob("*.ndax"),  # already zipped
+                *data_dir.rglob("*.nda"),
+                *data_dir.rglob("*.nda.zip"),  # can save a lot of space
+            )
+        }
+        outputs = {_remove_extension(f.name): f for f in data_dir.rglob("*.parquet")}
 
         # Create list of (input_file, output_file) tuples
         file_pairs = [(inputs[stem], outputs[stem]) for stem in inputs.keys() & outputs.keys()]
