@@ -49,7 +49,7 @@ dtypes = {
 def _time_str_to_float(time_str: str) -> float:
     """Convert hh:mm:ss.ms to (float64) seconds."""
     h, m, s, ms = re.split(r"[:.]", time_str)
-    return float(h) * 3600 + float(m) * 60 + float(s) + float(ms) / 1000
+    return float(h) * 3600 + float(m) * 60 + float(s) + float("0." + ms)
 
 
 def btsda_csv_to_parquet(csv_file: str | Path, out_file: str | Path | None = None) -> pl.DataFrame:
