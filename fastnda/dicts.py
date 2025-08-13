@@ -36,10 +36,8 @@ dtype_dict = {
     "step_count": pl.UInt32,
     "step_index": pl.UInt32,
     "status": pl.Enum(state_dict.values()),
-    "charge_capacity_mAh": pl.Float32,
-    "discharge_capacity_mAh": pl.Float32,
-    "charge_energy_mWh": pl.Float32,
-    "discharge_energy_mWh": pl.Float32,
+    "capacity_mAh": pl.Float32,
+    "energy_mWh": pl.Float32,
 }
 
 
