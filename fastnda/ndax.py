@@ -20,7 +20,7 @@ from fastnda.utils import _count_changes
 logger = logging.getLogger(__name__)
 
 
-def read_ndax(file: str | Path) -> tuple[pl.DataFrame, dict[str, str | float]]:
+def read_ndax(file: str | Path) -> pl.DataFrame:
     """Read data from a Neware .ndax zipped file.
 
     Args:
@@ -37,8 +37,6 @@ def read_ndax(file: str | Path) -> tuple[pl.DataFrame, dict[str, str | float]]:
 
     """
     zf = zipfile.PyZipFile(str(file))
-
-    metadata = read_metadata(zf)
 
     # Find all auxiliary channel files
     # Auxiliary files files need to be matched to entries in TestInfo.xml
@@ -124,33 +122,34 @@ def read_ndax(file: str | Path) -> tuple[pl.DataFrame, dict[str, str | float]]:
             aux_df = aux_df.rename({col: f"aux{aux_id}_{col}" for col in aux_df.columns if col not in ["index"]})
         df = df.join(aux_df, how="left", on="index")
 
-    return df, metadata
+    return df
 
 
-def read_metadata(zf: zipfile.ZipFile) -> dict[str, str | float]:
+def read_ndax_metadata(file: str | Path) -> dict[str, str | float]:
     """Read metadata from VersionInfo.xml and Step.xml in a Neware .ndax file."""
-    metadata = {}
-    # Read version information
-    try:
-        version_info = zf.read("VersionInfo.xml").decode("gb2312")
-        config = ElementTree.fromstring(version_info).find("config/ZwjVersion")
-        if config is not None:
-            metadata["Server version"] = config.attrib["SvrVer"]
-            metadata["Client version"] = config.attrib["CurrClientVer"]
-            metadata["Control unit version"] = config.attrib["ZwjVersion"]
-            metadata["Tester version"] = config.attrib["MainXwjVer"]
-    except Exception:
-        logger.exception("Failed to read VersionInfo.xml")
+    with zipfile.PyZipFile(str(file)) as zf:
+        metadata = {}
+        # Read version information
+        try:
+            version_info = zf.read("VersionInfo.xml").decode("gb2312")
+            config = ElementTree.fromstring(version_info).find("config/ZwjVersion")
+            if config is not None:
+                metadata["Server version"] = config.attrib["SvrVer"]
+                metadata["Client version"] = config.attrib["CurrClientVer"]
+                metadata["Control unit version"] = config.attrib["ZwjVersion"]
+                metadata["Tester version"] = config.attrib["MainXwjVer"]
+        except Exception:
+            logger.exception("Failed to read VersionInfo.xml")
 
-    # Read active mass
-    try:
-        step = zf.read("Step.xml").decode("gb2312")
-        scq = ElementTree.fromstring(step).find("config/Head_Info/SCQ")
-        if scq is not None:
-            active_mass = float(scq.attrib["Value"])
-            metadata["Active mass"] = active_mass / 1000
-    except Exception:
-        logger.exception("Failed to read Step.xml")
+        # Read active mass
+        try:
+            step = zf.read("Step.xml").decode("gb2312")
+            scq = ElementTree.fromstring(step).find("config/Head_Info/SCQ")
+            if scq is not None:
+                active_mass = float(scq.attrib["Value"])
+                metadata["Active mass"] = active_mass / 1000
+        except Exception:
+            logger.exception("Failed to read Step.xml")
 
     return metadata
 

@@ -21,9 +21,9 @@ def parsed_data(file_pair: tuple[Path, Path]) -> tuple[pl.DataFrame, pl.DataFram
             # unzip file to a temp location and read
             zip_test.extractall(tmp_dir)
             test_file = Path(tmp_dir) / test_file.stem
-            df, _metadata = fastnda.read(test_file, software_cycle_number=False)
+            df = fastnda.read(test_file, software_cycle_number=False)
     else:
-        df, _metadata = fastnda.read(test_file, software_cycle_number=False)
+        df = fastnda.read(test_file, software_cycle_number=False)
     df_ref = pl.read_parquet(ref_file)
     return df, df_ref
 

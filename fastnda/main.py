@@ -7,8 +7,8 @@ from typing import Literal
 import polars as pl
 
 from fastnda.dicts import dtype_dict
-from fastnda.nda import read_nda
-from fastnda.ndax import read_ndax
+from fastnda.nda import read_nda, read_nda_metadata
+from fastnda.ndax import read_ndax, read_ndax_metadata
 from fastnda.utils import _generate_cycle_number, state_dict
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def read(
     file: str | Path, software_cycle_number: bool = True, cycle_mode: Literal["chg", "dchg", "auto"] = "chg"
-) -> tuple[pl.DataFrame, dict[str, str | float]]:
+) -> pl.DataFrame:
     """Read electrochemical data from an Neware nda or ndax binary file.
 
     Args:
@@ -35,9 +35,9 @@ def read(
     # Read file and generate DataFrame
     file = Path(file)
     if file.suffix == ".nda":
-        df, metadata = read_nda(file)
+        df = read_nda(file)
     elif file.suffix == ".ndax":
-        df, metadata = read_ndax(file)
+        df = read_ndax(file)
     else:
         msg = "File type not supported!"
         raise ValueError(msg)
@@ -65,4 +65,15 @@ def read(
     aux_columns = [name for name in df.columns if name.startswith("aux")]
     df = df.select(non_aux_columns + aux_columns)
 
-    return df, metadata
+    return df
+
+
+def read_metadata(file: str | Path) -> dict[str, str | float]:
+    """Read metadata from a Neware .nda or .ndax file."""
+    file = Path(file)
+    if file.suffix == ".nda":
+        return read_nda_metadata(file)
+    if file.suffix == ".ndax":
+        return read_ndax_metadata(file)
+    msg = "File type not supported!"
+    raise ValueError(msg)

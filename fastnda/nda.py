@@ -14,7 +14,7 @@ from fastnda.utils import _count_changes
 logger = logging.getLogger(__name__)
 
 
-def read_nda(file: str | Path) -> tuple[pl.DataFrame, dict[str, str | float]]:
+def read_nda(file: str | Path) -> pl.DataFrame:
     """Read data from a Neware .nda binary file.
 
     Args:
@@ -38,15 +38,28 @@ def read_nda(file: str | Path) -> tuple[pl.DataFrame, dict[str, str | float]]:
         if mm.read(6) != b"NEWARE":
             msg = f"{file} does not appear to be a Neware file."
             raise ValueError(msg)
-
         # Get the file version
-        metadata = read_metadata(mm)
+        nda_version = int(mm[14])
+        logger.info("Reading nda version %s", nda_version)
+
+        # Try to find server and client version info
+        version_loc = mm.find(b"BTSServer")
+        if version_loc != -1:
+            mm.seek(version_loc)
+            server = mm.read(50).strip(b"\x00").decode()
+            logger.info("Server version: %s", server)
+
+            mm.seek(50, 1)
+            client = mm.read(50).strip(b"\x00").decode()
+            logger.info("Client version: %s", client)
+        else:
+            logger.info("BTS version not found!")
 
         # version specific settings
-        if metadata["nda_version"] == 29:
+        if nda_version == 29:
             logger.info("Reading nda version 29")
             df, aux_df = _read_nda_29(mm)
-        elif metadata["nda_version"] == 130:
+        elif nda_version == 130:
             if mm[1024:1025] == b"\x55":  # It is BTS 9.1
                 logger.info("Reading nda version 130 BTS9.1")
                 df, aux_df = _read_nda_130_91(mm)
@@ -54,7 +67,7 @@ def read_nda(file: str | Path) -> tuple[pl.DataFrame, dict[str, str | float]]:
                 logger.info("Reading nda version 130 BTS9.0")
                 df, aux_df = _read_nda_130_90(mm)
         else:
-            msg = f"nda version {metadata['nda_version']} is not yet supported!"
+            msg = f"nda version {nda_version} is not yet supported!"
             raise NotImplementedError(msg)
 
     # Drop duplicate indexes and sort
@@ -72,27 +85,34 @@ def read_nda(file: str | Path) -> tuple[pl.DataFrame, dict[str, str | float]]:
             aux_df = aux_df.unique(subset=["index"])
         df = df.join(aux_df, on="index", how="left")
 
-    return df, metadata
+    return df
 
 
-def read_metadata(mm: mmap.mmap) -> dict[str, str | float]:
+def read_nda_metadata(file: str | Path) -> dict[str, str | float]:
     """Read metadata from a Neware .nda file."""
-    metadata = {}
-    # Get the file version
-    metadata["nda_version"] = int(mm[14])
+    file = Path(file)
+    with file.open("rb") as f:
+        mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
 
-    # Try to find server and client version info
-    version_loc = mm.find(b"BTSServer")
-    if version_loc != -1:
-        mm.seek(version_loc)
-        server = mm.read(50).strip(b"\x00").decode()
-        metadata["server"] = server
+        if mm.read(6) != b"NEWARE":
+            msg = f"{file} does not appear to be a Neware file."
+            raise ValueError(msg)
+        metadata = {}
+        # Get the file version
+        metadata["nda_version"] = int(mm[14])
 
-        mm.seek(50, 1)
-        client = mm.read(50).strip(b"\x00").decode()
-        metadata["client"] = client
-    else:
-        logger.info("BTS version not found!")
+        # Try to find server and client version info
+        version_loc = mm.find(b"BTSServer")
+        if version_loc != -1:
+            mm.seek(version_loc)
+            server = mm.read(50).strip(b"\x00").decode()
+            metadata["server"] = server
+
+            mm.seek(50, 1)
+            client = mm.read(50).strip(b"\x00").decode()
+            metadata["client"] = client
+        else:
+            logger.info("BTS version not found!")
 
     return metadata
 
