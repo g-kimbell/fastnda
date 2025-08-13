@@ -96,6 +96,8 @@ def read_ndax(file: str | Path) -> tuple[pl.DataFrame, dict[str, str | float]]:
     df = dfs["data.ndc"]
 
     if "data_runInfo.ndc" in dfs:
+        # It is possible to have duplicate indexes in runInfo - keep last of duplicates
+        dfs["data_runInfo.ndc"] = dfs["data_runInfo.ndc"].unique(subset="index", keep="last")
         df = df.join(dfs["data_runInfo.ndc"], how="left", on="index")
     if "data_step.ndc" in dfs:
         df = df.with_columns([pl.col("step_count").forward_fill()])
