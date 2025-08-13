@@ -1,5 +1,5 @@
 [project]
-name = "FastNDA"
+name = "fastnda"
 dynamic = ["version"]
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
