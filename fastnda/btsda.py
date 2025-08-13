@@ -42,6 +42,7 @@ dtypes = {
     "Capacity(mAs)": pl.Float32,
     "Energy(mWs)": pl.Float32,
     "Date": pl.Datetime("ms"),
+    "Step Count": pl.UInt32,
 }
 
 
@@ -69,6 +70,7 @@ def btsda_csv_to_parquet(csv_file: str | Path, out_file: str | Path | None = Non
         - Capacity (in mAs)
         - Energy (in mWs)
         - Date (in hh:mm:ss.ms)
+        - Step start and end identification
     """
     csv_file = Path(csv_file)
     out_file = csv_file.with_suffix(".parquet") if out_file is None else Path(out_file)
@@ -79,6 +81,7 @@ def btsda_csv_to_parquet(csv_file: str | Path, out_file: str | Path | None = Non
         pl.col("Total Time").map_elements(_time_str_to_float, return_dtype=pl.Float64),
         pl.col("Date").str.to_datetime(format="%Y-%m-%d %H:%M:%S%.f", time_unit="ms"),
         pl.col("Step Index").diff().fill_null(0).ne(0).cum_sum().alias("Step"),
+        pl.col("Step start and end identification ").eq(0).cast(pl.UInt32).fill_null(0).cum_sum().alias("Step Count"),
     )
     df = df.rename({"Current(µA)": "Current(uA)"})
     df = df.select(list(dtypes.keys()))
