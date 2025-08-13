@@ -1,2 +1,6 @@
 # Normalize line endings to LF on commit
 * text=auto
+
+*.nda binary
+*.ndax binary
+*.zip binary
