@@ -35,22 +35,32 @@ class TestRead:
         """Check that the expected columns are in the DataFrames."""
         df, df_ref = parsed_data
         df_columns = {
-            "step_time_s",
-            "unix_time_s",
+            "index",
             "voltage_V",
             "current_mA",
-            "charge_capacity_mAh",
-            "discharge_capacity_mAh",
+            "unix_time_s",
+            "step_time_s",
+            "timestamp",
+            "cycle_count",
+            "step_count",
+            "step_index",
+            "status",
+            "capacity_mAh",
+            "energy_mWh",
         }
         assert all(col in df.columns for col in df_columns), (
             f"Missing columns in DataFrame: {df_columns - set(df.columns)}"
         )
         df_ref_columns = {
             "Time",
+            "Total Time",
+            "Date",
             "Step Index",
+            "Step Count",
             "Voltage(mV)",
             "Current(uA)",
             "Capacity(mAs)",
+            "Energy(mWs)",
         }
         assert all(col in df_ref.columns for col in df_ref_columns), (
             f"Missing columns in reference DataFrame: {df_ref_columns - set(df_ref.columns)}"
@@ -68,7 +78,7 @@ class TestRead:
         )
         assert_series_equal(
             df["step_count"],
-            df_ref["Step Index"].diff().fill_null(0).ne(0).cum_sum() + 1,
+            df_ref["Step Count"],
             check_names=False,
         )
         # status is enum - faster, but not directly comparable to categorical
@@ -152,23 +162,25 @@ class TestRead:
         )
 
     def test_capacity(self, parsed_data: tuple) -> None:
-        """In some nda files, mAs are only recorded to 0.1 mAs = 3e-5 mAh."""
+        """In some nda files, mAs are only recorded to 1 mAs = 3e-4 mAh."""
         df, df_ref = parsed_data
-        # Neware capacity is absolute and contains both charge and discharge
+        # Neware capacity can be absolute for both charge and discharge
+        # It can also can have negative values for discharge
         assert_series_equal(
-            (df["charge_capacity_mAh"] + df["discharge_capacity_mAh"]),
-            df_ref["Capacity(mAs)"] / 3600,
+            df["capacity_mAh"].abs(),
+            df_ref["Capacity(mAs)"].abs() / 3600,
             check_names=False,
-            atol=3e-5,
+            atol=3e-4,
         )
 
     def test_energy(self, parsed_data: tuple) -> None:
-        """Neware energy should be recorded to 1e-6 mWh, check to 5e-7 mWh."""
+        """Neware energy can be recorded 0.1 mWs, check to 3e-5 mWh."""
         df, df_ref = parsed_data
-        # Neware energy is absolute and contains both charge and discharge
+        # Neware capacity can be absolute for both charge and discharge
+        # It can also can have negative values for discharge
         assert_series_equal(
-            (df["charge_energy_mWh"] + df["discharge_energy_mWh"]),
-            df_ref["Energy(mWs)"] / 3600,
+            df["energy_mWh"].abs(),
+            df_ref["Energy(mWs)"].abs() / 3600,
             check_names=False,
-            atol=5e-7,
+            atol=3e-5,
         )
