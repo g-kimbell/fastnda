@@ -63,7 +63,7 @@ def read_ndax(file: str | Path) -> tuple[pl.DataFrame, dict[str, str | float]]:
         try:
             step = zf.read("TestInfo.xml").decode("gb2312")
             test_info = ElementTree.fromstring(step).find("config/TestInfo")
-            if test_info:
+            if test_info is not None:
                 aux_dicts.extend(
                     {k: int(v) if v.isdigit() else v for k, v in child.attrib.items()}
                     for child in test_info
