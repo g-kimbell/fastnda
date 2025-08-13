@@ -1,19 +1,19 @@
-# Install Python and project, lint, run pytest
-
-name: Pytest
+name: CI
 
 on:
   push:
-    branches: [ "*" ]
+    branches: [ "main" ]
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+*
   pull_request:
-    branches: [ "*" ]
+    branches: [ "main" ]
 
 permissions:
   contents: read
 
 jobs:
-  build:
-
+  test:
+    name: Test with Pytest
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -40,3 +40,36 @@ jobs:
       - name: Test with pytest
         run: |
           pytest --cov=fastnda --cov-report=term
+
+  # Publish to PyPI if tagged and tests pass
+  publish:
+    name: Publish to PyPI
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'g-kimbell/fastnda'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install flit
+        run: pip install flit~=3.12
+
+      - name: Publish to PyPI
+        run: flit publish
+        env:
+          FLIT_USERNAME: __token__
+          FLIT_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
