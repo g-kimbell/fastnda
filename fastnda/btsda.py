@@ -75,7 +75,6 @@ def btsda_csv_to_parquet(csv_file: str | Path, out_file: str | Path | None = Non
     csv_file = Path(csv_file)
     out_file = csv_file.with_suffix(".parquet") if out_file is None else Path(out_file)
     df = pl.read_csv(csv_file, infer_schema_length=10000, encoding="cp1252")
-    print(df.columns)
     df = df.with_columns(
         pl.col("Time").map_elements(_time_str_to_float, return_dtype=pl.Float64),
         pl.col("Total Time").map_elements(_time_str_to_float, return_dtype=pl.Float64),
