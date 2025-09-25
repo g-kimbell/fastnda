@@ -704,7 +704,7 @@ def _read_ndc_17_filetype_7(buf: bytes) -> pl.DataFrame:
     )
     return _bytes_to_df(buf, dtype, 132, 64).with_columns(
         [
-            pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("cycle_count"),
+            pl.col("cycle_count") + 1,
             _count_changes(pl.col("step_index")).alias("step_count"),
         ]
     )
@@ -828,6 +828,7 @@ NDC_READERS: dict[tuple[int, int], Callable[[bytes], pl.DataFrame]] = {
     (16, 7): _read_ndc_16_filetype_7,
     (16, 18): _read_ndc_16_filetype_18,
     (17, 1): _read_ndc_17_filetype_1,
+    (17, 5): _read_ndc_14_filetype_5,
     (17, 7): _read_ndc_17_filetype_7,
     (17, 18): _read_ndc_17_filetype_18,
 }
