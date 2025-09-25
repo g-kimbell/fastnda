@@ -83,8 +83,9 @@ def btsda_csv_to_parquet(csv_file: str | Path, out_file: str | Path | None = Non
         pl.col("Step start and end identification ").eq(0).cast(pl.UInt32).fill_null(0).cum_sum().alias("Step Count"),
     )
     df = df.rename({"Current(µA)": "Current(uA)"})
-    df = df.select(list(dtypes.keys()))
-    df = df.cast(dtypes)
+    aux_cols = [c for c in df.columns if re.match(r"^[TtHV]\d+", c)]
+    df = df.select(list(dtypes.keys()) + aux_cols)
+    df = df.cast({**dtypes, **dict.fromkeys(aux_cols, pl.Float32)})
     # Brotli seems to have best file size, we don't care about speed
     # Trying to keep repo small with lots of test data
     df.write_parquet(out_file, compression="brotli", compression_level=11)
