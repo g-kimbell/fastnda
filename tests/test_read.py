@@ -192,3 +192,24 @@ class TestRead:
         df_aux = [c for c in df.columns if c.startswith("aux")]
         df_ref_aux = [c for c in df_ref.columns if re.match(r"^[TtHV]\d+", c)]
         assert len(df_aux) == len(df_ref_aux), "Number of aux channels does not match."
+
+        for test_col in df_aux:
+            if "temp" in test_col:  # temp only recorded to 0.1 degC
+                tol = 5e-2
+                multiplier = 1.0
+            elif "voltage" in test_col:
+                tol = 1e-4  # voltage usually accurate to 0.1 mV
+                multiplier = 1e-3  # ref is in mV
+            else:
+                tol = 1e-3
+                multiplier = 1.0
+            results: dict[str, float] = {}
+            for ref_col in df_ref_aux:
+                results[ref_col] = sum(abs(df[test_col] - multiplier * df_ref[ref_col])) / len(df)
+                if results[ref_col] < tol:
+                    break
+            else:
+                # raise an error
+                closest = min(results, key=results.get)
+                msg = f"Could not find any column matching values of {test_col}, closest reference was {closest} with an average difference of {results[closest]}"
+                raise ValueError(msg)
