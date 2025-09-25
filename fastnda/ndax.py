@@ -94,8 +94,6 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
     df = dfs["data.ndc"]
 
     if "data_runInfo.ndc" in dfs:
-        # It is possible to have duplicate indexes in runInfo - keep last of duplicates
-        dfs["data_runInfo.ndc"] = dfs["data_runInfo.ndc"].unique(subset="index", keep="last")
         df = df.join(dfs["data_runInfo.ndc"], how="left", on="index")
     if "data_step.ndc" in dfs:
         df = df.with_columns([pl.col("step_count").forward_fill()])
@@ -515,6 +513,7 @@ def _read_ndc_11_filetype_18(buf: bytes) -> pl.DataFrame:
             ]
         )
         .drop("uts_ms")
+        .unique(subset="index", keep="last")  # Assume same rule as 14 - not sure without data
     )
 
 
@@ -593,6 +592,7 @@ def _read_ndc_14_filetype_18(buf: bytes) -> pl.DataFrame:
             ]
         )
         .drop("uts_ms")
+        .unique(subset="index", keep="last")  # Seems like this file type keeps the last of duplicates, 17 is different
     )
 
 
@@ -741,6 +741,7 @@ def _read_ndc_17_filetype_18(buf: bytes) -> pl.DataFrame:
             ]
         )
         .drop("uts_ms")
+        .unique(subset="index", keep="first")  # Seems like this file type keeps the last of duplicates, 14 is different
     )
 
 
