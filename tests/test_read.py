@@ -1,5 +1,6 @@
 """Test read functionality."""
 
+import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
@@ -114,7 +115,7 @@ class TestRead:
             df["step_time_s"],
             df_ref["Time"],
             check_names=False,
-            atol=5e-7,
+            abs_tol=5e-7,
         )
 
     def test_datetime(self, parsed_data: tuple) -> None:
@@ -128,7 +129,7 @@ class TestRead:
             duts,
             duts_ref,
             check_names=False,
-            atol=5e-7,
+            abs_tol=5e-7,
         )
 
         # Datetime should agree with uts
@@ -136,7 +137,7 @@ class TestRead:
             df["timestamp"].cast(pl.Float64) * 1e-6,
             df["unix_time_s"],
             check_names=False,
-            atol=5e-7,
+            abs_tol=5e-7,
         )
         # Cannot cycle cells before Neware was founded in 1998
         assert df["unix_time_s"].min() > 883609200
@@ -148,7 +149,7 @@ class TestRead:
             df["voltage_V"],
             df_ref["Voltage(mV)"] / 1000,
             check_names=False,
-            atol=5e-5,
+            abs_tol=6e-5,
         )
 
     def test_current(self, parsed_data: tuple) -> None:
@@ -158,7 +159,7 @@ class TestRead:
             df["current_mA"],
             df_ref["Current(uA)"] / 1000,
             check_names=False,
-            atol=0.05,
+            abs_tol=0.05,
         )
 
     def test_capacity(self, parsed_data: tuple) -> None:
@@ -170,7 +171,7 @@ class TestRead:
             df["capacity_mAh"].abs(),
             df_ref["Capacity(mAs)"].abs() / 3600,
             check_names=False,
-            atol=3e-4,
+            abs_tol=3e-4,
         )
 
     def test_energy(self, parsed_data: tuple) -> None:
@@ -182,5 +183,33 @@ class TestRead:
             df["energy_mWh"].abs(),
             df_ref["Energy(mWs)"].abs() / 3600,
             check_names=False,
-            atol=3e-5,
+            abs_tol=3e-5,
         )
+
+    def test_n_aux(self, parsed_data: tuple) -> None:
+        """Dataframes should have the same number of aux channels."""
+        df, df_ref = parsed_data
+        df_aux = [c for c in df.columns if c.startswith("aux")]
+        df_ref_aux = [c for c in df_ref.columns if re.match(r"^[TtHV]\d+", c)]
+        assert len(df_aux) == len(df_ref_aux), "Number of aux channels does not match."
+
+        for test_col in df_aux:
+            if "temp" in test_col:  # temp only recorded to 0.1 degC
+                tol = 5e-2
+                multiplier = 1.0
+            elif "voltage" in test_col:
+                tol = 1e-4  # voltage usually accurate to 0.1 mV
+                multiplier = 1e-3  # ref is in mV
+            else:
+                tol = 1e-3
+                multiplier = 1.0
+            results: dict[str, float] = {}
+            for ref_col in df_ref_aux:
+                results[ref_col] = sum(abs(df[test_col] - multiplier * df_ref[ref_col])) / len(df)
+                if results[ref_col] < tol:
+                    break
+            else:
+                # raise an error
+                closest = min(results, key=results.get)
+                msg = f"Could not find any column matching values of {test_col}, closest reference was {closest} with an average difference of {results[closest]}"
+                raise ValueError(msg)

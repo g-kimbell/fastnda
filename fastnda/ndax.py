@@ -93,17 +93,14 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
 
     df = dfs["data.ndc"]
 
+    # 'runInfo' contains times, capacities, energies, and needs to be forward-filled/interpolated
     if "data_runInfo.ndc" in dfs:
-        # It is possible to have duplicate indexes in runInfo - keep last of duplicates
-        dfs["data_runInfo.ndc"] = dfs["data_runInfo.ndc"].unique(subset="index", keep="last")
         df = df.join(dfs["data_runInfo.ndc"], how="left", on="index")
-    if "data_step.ndc" in dfs:
-        df = df.with_columns([pl.col("step_count").forward_fill()])
-        df = df.join(dfs["data_step.ndc"], how="left", on="step_count")
-
-    # Interpolate missing data if necessary
-    if "dt" in df.columns:
         df = _data_interpolation(df)
+
+        # 'step' contains cycle count, step index, status for each step
+        if "data_step.ndc" in dfs:
+            df = df.join(dfs["data_step.ndc"], how="left", on="step_count")
 
     # Merge the aux data if it exists
     for i, (f, aux_dict) in enumerate(aux_ch_dict.items()):
@@ -172,6 +169,7 @@ def _data_interpolation(df: pl.DataFrame) -> pl.DataFrame:
                 pl.col("step_time_s").is_not_null().cum_sum().shift(1).fill_null(0).alias("group_idx"),
                 pl.col(
                     "dt",
+                    "step_count",
                     "step_time_s",
                     "unix_time_s",
                     "charge_capacity_mAh",
@@ -393,11 +391,18 @@ def _read_ndc_5_filetype_5(buf: bytes) -> pl.DataFrame:
             ("_pad5", "V42"),  # 45-86
         ]
     )
-    return _bytes_to_df(buf, dtype, 125, 56).with_columns(
+    df = _bytes_to_df(buf, dtype, 125, 56).with_columns(
         pl.col("voltage_V").cast(pl.Float32) * 1e-4,
         pl.col("temperature_degC").cast(pl.Float32) * 0.1,
         pl.col("temperature_setpoint_degC").cast(pl.Float32) * 0.1,
     )
+    # Drop empty columns
+    cols_to_drop = [
+        col
+        for col in ["voltage_V", "temperature_degC", "temperature_setpoint_degC"]
+        if df.filter(pl.col(col) != 0).is_empty()
+    ]
+    return df.select(pl.exclude(cols_to_drop))
 
 
 def _read_ndc_11_filetype_1(buf: bytes) -> pl.DataFrame:
@@ -425,13 +430,16 @@ def _read_ndc_11_filetype_5(buf: bytes) -> pl.DataFrame:
                 ("temperature_degC", "<i2"),
             ]
         )
-        return _bytes_to_df(buf, dtype, 132, 2, mask=101).with_columns(
+        df = _bytes_to_df(buf, dtype, 132, 2, mask=101).with_columns(
             [
                 pl.col("voltage_V") * 1e-4,  # 0.1 mV -> V
                 pl.col("temperature_degC").cast(pl.Float32) * 0.1,  # 0.1'C -> 'C
                 pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("index"),
             ]
         )
+        # Drop empty columns
+        cols_to_drop = [col for col in ["voltage_V", "temperature_degC"] if df.filter(pl.col(col) != 0).is_empty()]
+        return df.select(pl.exclude(cols_to_drop))
 
     if buf[header + 132 : header + 133] == b"\x74":
         dtype = np.dtype(
@@ -497,7 +505,7 @@ def _read_ndc_11_filetype_18(buf: bytes) -> pl.DataFrame:
         _bytes_to_df(buf, dtype, 132, 16)
         .with_columns(
             [
-                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,  # Division in 32-bit
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,  # ms -> s
                 pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
                 / 3600,  # mAs|mWs -> mAh|mWh
                 (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
@@ -505,6 +513,7 @@ def _read_ndc_11_filetype_18(buf: bytes) -> pl.DataFrame:
             ]
         )
         .drop("uts_ms")
+        .unique(subset="index", keep="last")  # Assume same rule as 14 - not sure without data
     )
 
 
@@ -583,7 +592,98 @@ def _read_ndc_14_filetype_18(buf: bytes) -> pl.DataFrame:
             ]
         )
         .drop("uts_ms")
+        .unique(subset="index", keep="last")  # Seems like this file type keeps the last of duplicates, 17 is different
     )
+
+
+def _read_ndc_16_filetype_1(buf: bytes) -> pl.DataFrame:
+    dtype = np.dtype(
+        [
+            ("voltage_V", "<f4"),
+            ("current_mA", "<f4"),
+        ]
+    )
+    return _bytes_to_df(buf, dtype, 132, 4).with_columns(
+        [
+            pl.col("voltage_V") / 10000,
+            pl.col("current_mA"),
+        ]
+    )
+
+
+def _read_ndc_16_filetype_5(buf: bytes) -> pl.DataFrame:
+    header = 4096
+    if buf[header + 132 : header + 133] == b"\x65":
+        dtype = np.dtype(
+            [
+                ("mask", "<i1"),
+                ("voltage_V", "<f4"),
+                ("temperature_degC", "<i2"),
+            ]
+        )
+        df = _bytes_to_df(buf, dtype, 132, 2, mask=101).with_columns(
+            [
+                pl.col("voltage_V") / 10000,  # 0.1 mV -> V
+                pl.col("temperature_degC").cast(pl.Float32) * 0.1,  # 0.1'C -> 'C
+                pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("index"),
+            ]
+        )
+        # Drop empty columns
+        cols_to_drop = [col for col in ["voltage_V", "temperature_degC"] if df.filter(pl.col(col) != 0).is_empty()]
+        return df.select(pl.exclude(cols_to_drop))
+    msg = "Unknown file structure for ndc version 16 filetype 5."
+    raise NotImplementedError(msg)
+
+
+def _read_ndc_16_filetype_7(buf: bytes) -> pl.DataFrame:
+    dtype = np.dtype(
+        [
+            ("cycle_count", "<i4"),
+            ("step_index", "<i4"),
+            ("_pad1", "V16"),
+            ("status", "<i1"),
+            ("_pad2", "V8"),
+            ("index", "<i4"),
+            ("_pad3", "V63"),
+        ]
+    )
+    return _bytes_to_df(buf, dtype, 132, 64).with_columns(
+        [
+            pl.col("cycle_count") + 1,
+            _count_changes(pl.col("step_index")).alias("step_count"),
+        ]
+    )
+
+
+def _read_ndc_16_filetype_18(buf: bytes) -> pl.DataFrame:
+    dtype = np.dtype(
+        [
+            ("step_time_s", "<i4"),
+            ("_pad1", "V1"),
+            ("charge_capacity_mAh", "<f4"),
+            ("discharge_capacity_mAh", "<f4"),
+            ("charge_energy_mWh", "<f4"),
+            ("discharge_energy_mWh", "<f4"),
+            ("_pad2", "V8"),
+            ("dt", "<i4"),
+            ("unix_time_s", "<i4"),
+            ("step_count", "<i4"),
+            ("index", "<i4"),
+            ("uts_ms", "<i2"),
+            ("_pad3", "V53"),
+        ]
+    )
+    df = _bytes_to_df(buf, dtype, 132, 64)
+    return df.with_columns(
+        [
+            pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,
+            (
+                pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
+                / 3600
+            ).cast(pl.Float32),  # mAs|mWs -> mAh|mWh
+            (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
+        ]
+    ).drop("uts_ms")
 
 
 def _read_ndc_17_filetype_1(buf: bytes) -> pl.DataFrame:
@@ -604,7 +704,7 @@ def _read_ndc_17_filetype_7(buf: bytes) -> pl.DataFrame:
     )
     return _bytes_to_df(buf, dtype, 132, 64).with_columns(
         [
-            pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("cycle_count"),
+            pl.col("cycle_count") + 1,
             _count_changes(pl.col("step_index")).alias("step_count"),
         ]
     )
@@ -641,6 +741,7 @@ def _read_ndc_17_filetype_18(buf: bytes) -> pl.DataFrame:
             ]
         )
         .drop("uts_ms")
+        .unique(subset="index", keep="first")  # Seems like this file type keeps the last of duplicates, 14 is different
     )
 
 
@@ -722,7 +823,12 @@ NDC_READERS: dict[tuple[int, int], Callable[[bytes], pl.DataFrame]] = {
     (14, 5): _read_ndc_14_filetype_5,
     (14, 7): _read_ndc_14_filetype_7,
     (14, 18): _read_ndc_14_filetype_18,
+    (16, 1): _read_ndc_16_filetype_1,
+    (16, 5): _read_ndc_16_filetype_5,
+    (16, 7): _read_ndc_16_filetype_7,
+    (16, 18): _read_ndc_16_filetype_18,
     (17, 1): _read_ndc_17_filetype_1,
+    (17, 5): _read_ndc_14_filetype_5,
     (17, 7): _read_ndc_17_filetype_7,
     (17, 18): _read_ndc_17_filetype_18,
 }
