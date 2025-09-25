@@ -1,5 +1,6 @@
 """Test read functionality."""
 
+import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
@@ -184,3 +185,10 @@ class TestRead:
             check_names=False,
             atol=3e-5,
         )
+
+    def test_n_aux(self, parsed_data: tuple) -> None:
+        """Dataframes should have the same number of aux channels."""
+        df, df_ref = parsed_data
+        df_aux = [c for c in df.columns if c.startswith("aux")]
+        df_ref_aux = [c for c in df_ref.columns if re.match(r"^[TtHV]\d+", c)]
+        assert len(df_aux) == len(df_ref_aux), "Number of aux channels does not match."
