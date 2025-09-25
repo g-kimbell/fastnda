@@ -93,15 +93,14 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
 
     df = dfs["data.ndc"]
 
+    # 'runInfo' contains times, capacities, energies, and needs to be forward-filled/interpolated
     if "data_runInfo.ndc" in dfs:
         df = df.join(dfs["data_runInfo.ndc"], how="left", on="index")
-    if "data_step.ndc" in dfs:
-        df = df.with_columns([pl.col("step_count").forward_fill()])
-        df = df.join(dfs["data_step.ndc"], how="left", on="step_count")
-
-    # Interpolate missing data if necessary
-    if "dt" in df.columns:
         df = _data_interpolation(df)
+
+        # 'step' contains cycle count, step index, status for each step
+        if "data_step.ndc" in dfs:
+            df = df.join(dfs["data_step.ndc"], how="left", on="step_count")
 
     # Merge the aux data if it exists
     for i, (f, aux_dict) in enumerate(aux_ch_dict.items()):
@@ -170,6 +169,7 @@ def _data_interpolation(df: pl.DataFrame) -> pl.DataFrame:
                 pl.col("step_time_s").is_not_null().cum_sum().shift(1).fill_null(0).alias("group_idx"),
                 pl.col(
                     "dt",
+                    "step_count",
                     "step_time_s",
                     "unix_time_s",
                     "charge_capacity_mAh",
@@ -505,7 +505,7 @@ def _read_ndc_11_filetype_18(buf: bytes) -> pl.DataFrame:
         _bytes_to_df(buf, dtype, 132, 16)
         .with_columns(
             [
-                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,  # Division in 32-bit
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,  # ms -> s
                 pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
                 / 3600,  # mAs|mWs -> mAh|mWh
                 (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
