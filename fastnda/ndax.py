@@ -393,11 +393,18 @@ def _read_ndc_5_filetype_5(buf: bytes) -> pl.DataFrame:
             ("_pad5", "V42"),  # 45-86
         ]
     )
-    return _bytes_to_df(buf, dtype, 125, 56).with_columns(
+    df = _bytes_to_df(buf, dtype, 125, 56).with_columns(
         pl.col("voltage_V").cast(pl.Float32) * 1e-4,
         pl.col("temperature_degC").cast(pl.Float32) * 0.1,
         pl.col("temperature_setpoint_degC").cast(pl.Float32) * 0.1,
     )
+    # Drop empty columns
+    cols_to_drop = [
+        col
+        for col in ["voltage_V", "temperature_degC", "temperature_setpoint_degC"]
+        if df.filter(pl.col(col) != 0).is_empty()
+    ]
+    return df.select(pl.exclude(cols_to_drop))
 
 
 def _read_ndc_11_filetype_1(buf: bytes) -> pl.DataFrame:
@@ -425,13 +432,16 @@ def _read_ndc_11_filetype_5(buf: bytes) -> pl.DataFrame:
                 ("temperature_degC", "<i2"),
             ]
         )
-        return _bytes_to_df(buf, dtype, 132, 2, mask=101).with_columns(
+        df = _bytes_to_df(buf, dtype, 132, 2, mask=101).with_columns(
             [
                 pl.col("voltage_V") * 1e-4,  # 0.1 mV -> V
                 pl.col("temperature_degC").cast(pl.Float32) * 0.1,  # 0.1'C -> 'C
                 pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("index"),
             ]
         )
+        # Drop empty columns
+        cols_to_drop = [col for col in ["voltage_V", "temperature_degC"] if df.filter(pl.col(col) != 0).is_empty()]
+        return df.select(pl.exclude(cols_to_drop))
 
     if buf[header + 132 : header + 133] == b"\x74":
         dtype = np.dtype(
