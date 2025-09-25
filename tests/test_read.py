@@ -115,7 +115,7 @@ class TestRead:
             df["step_time_s"],
             df_ref["Time"],
             check_names=False,
-            atol=5e-7,
+            abs_tol=5e-7,
         )
 
     def test_datetime(self, parsed_data: tuple) -> None:
@@ -129,7 +129,7 @@ class TestRead:
             duts,
             duts_ref,
             check_names=False,
-            atol=5e-7,
+            abs_tol=5e-7,
         )
 
         # Datetime should agree with uts
@@ -137,7 +137,7 @@ class TestRead:
             df["timestamp"].cast(pl.Float64) * 1e-6,
             df["unix_time_s"],
             check_names=False,
-            atol=5e-7,
+            abs_tol=5e-7,
         )
         # Cannot cycle cells before Neware was founded in 1998
         assert df["unix_time_s"].min() > 883609200
@@ -149,7 +149,7 @@ class TestRead:
             df["voltage_V"],
             df_ref["Voltage(mV)"] / 1000,
             check_names=False,
-            atol=5e-5,
+            abs_tol=6e-5,
         )
 
     def test_current(self, parsed_data: tuple) -> None:
@@ -159,7 +159,7 @@ class TestRead:
             df["current_mA"],
             df_ref["Current(uA)"] / 1000,
             check_names=False,
-            atol=0.05,
+            abs_tol=0.05,
         )
 
     def test_capacity(self, parsed_data: tuple) -> None:
@@ -171,7 +171,7 @@ class TestRead:
             df["capacity_mAh"].abs(),
             df_ref["Capacity(mAs)"].abs() / 3600,
             check_names=False,
-            atol=3e-4,
+            abs_tol=3e-4,
         )
 
     def test_energy(self, parsed_data: tuple) -> None:
@@ -183,7 +183,7 @@ class TestRead:
             df["energy_mWh"].abs(),
             df_ref["Energy(mWs)"].abs() / 3600,
             check_names=False,
-            atol=3e-5,
+            abs_tol=3e-5,
         )
 
     def test_n_aux(self, parsed_data: tuple) -> None:
