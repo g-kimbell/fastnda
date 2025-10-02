@@ -294,6 +294,7 @@ def _read_ndc_2_filetype_1(buf: bytes) -> pl.DataFrame:
                     * pl.col("multiplier")
                     / 3600
                 ).cast(pl.Float32),
+                (pl.col("timestamp").cast(pl.Float64) / 1e6).alias("unix_time_s"),
             ]
         )
         .drop(["Y", "M", "D", "h", "m", "s"])
@@ -372,6 +373,7 @@ def _read_ndc_5_filetype_1(buf: bytes) -> pl.DataFrame:
                     * pl.col("multiplier")
                     / 3600
                 ).cast(pl.Float32),
+                (pl.col("timestamp").cast(pl.Float64) / 1e6).alias("unix_time_s"),
             ]
         )
         .drop(["Y", "M", "D", "h", "m", "s"])
