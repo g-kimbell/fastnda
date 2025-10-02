@@ -84,9 +84,10 @@ class TestRead:
         )
         # status is enum - faster, but not directly comparable to categorical
         # Need to cast both to same dtype, and replace spaces in ref
+        # Neware is inconsistent with 'Dchg' and 'DChg' in column names
         assert_series_equal(
             df["status"].cast(pl.String),
-            df_ref["Step Type"].cast(pl.String).str.replace_all(" ", "_"),
+            df_ref["Step Type"].cast(pl.String).str.replace_all(" ", "_").str.replace_all("Dchg", "DChg"),
             check_names=False,
         )
 
