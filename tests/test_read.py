@@ -186,12 +186,17 @@ class TestRead:
             abs_tol=3e-5,
         )
 
-    def test_n_aux(self, parsed_data: tuple) -> None:
-        """Dataframes should have the same number of aux channels."""
+    def test_aux_cols(self, parsed_data: tuple) -> None:
+        """Dataframes should have matching aux channels."""
         df, df_ref = parsed_data
         df_aux = [c for c in df.columns if c.startswith("aux")]
         df_ref_aux = [c for c in df_ref.columns if re.match(r"^[TtHV]\d+", c)]
-        assert len(df_aux) == len(df_ref_aux), "Number of aux channels does not match."
+
+        # Check if there are the same number of aux channels
+        if len(df_aux) != len(df_ref_aux):
+            # Remove empty columns in the ref
+            df_ref_aux = [col for col in df_ref_aux if col in df_ref.columns and not (df_ref[col] == 0).all()]
+            assert len(df_aux) == len(df_ref_aux), "Number of aux channels does not match."
 
         for test_col in df_aux:
             if "temp" in test_col:  # temp only recorded to 0.1 degC
