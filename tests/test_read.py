@@ -198,13 +198,7 @@ class TestRead:
         if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
             # If this fails, sometimes Neware does not count negative current during charge towards the capacity
             df = df.with_columns(
-                pl.col("capacity_mAh")
-                .abs()
-                .diff()
-                .clip(0)
-                .cum_sum()
-                .over(pl.col("step_count"))
-                .alias("capacity_ignore_negs_mAh")
+                pl.col("capacity_mAh").abs().cum_max().over(pl.col("step_count")).alias("capacity_ignore_negs_mAh")
             )
             abs_diff = (df["capacity_ignore_negs_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
             rel_diff = 2 * abs_diff / (df["capacity_ignore_negs_mAh"].abs() + df_ref["Capacity(mAs)"].abs() / 3600)
@@ -222,13 +216,7 @@ class TestRead:
         if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
             # If this fails, sometimes Neware does not count negative current during charge towards the energy
             df = df.with_columns(
-                pl.col("energy_mWh")
-                .abs()
-                .diff()
-                .clip(0)
-                .cum_sum()
-                .over(pl.col("step_count"))
-                .alias("energy_ignore_negs_mWh")
+                pl.col("energy_mWh").abs().cum_max().over(pl.col("step_count")).alias("energy_ignore_negs_mWh")
             )
             abs_diff = (df["energy_ignore_negs_mWh"] - df_ref["Energy(mWs)"].abs() / 3600).abs()
             rel_diff = 2 * abs_diff / (df["energy_ignore_negs_mWh"] + df_ref["Energy(mWs)"].abs() / 3600)
