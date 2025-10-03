@@ -37,7 +37,7 @@ class TestRead:
 
     def test_generate_cycle_number(self) -> None:
         """Test generating cycle numbers on just one file."""
-        test_file = Path(r"tests\test_data\nw4-120-1-6-53.ndax")
+        test_file = Path(__file__).parent / "test_data" / "nw4-120-1-6-53.ndax"
         df1 = fastnda.read(test_file, software_cycle_number=False)
         df2 = fastnda.read(test_file, software_cycle_number=True, cycle_mode="chg")
         status_mapping = {v: k for k, v in state_dict.items()}
