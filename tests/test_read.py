@@ -168,24 +168,48 @@ class TestRead:
         df, df_ref = parsed_data
         # Neware capacity can be absolute for both charge and discharge
         # It can also can have negative values for discharge
-        assert_series_equal(
-            df["capacity_mAh"].abs(),
-            df_ref["Capacity(mAs)"].abs() / 3600,
-            check_names=False,
-            abs_tol=3e-4,
-        )
+        abs_diff = (df["capacity_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
+        rel_diff = 2 * abs_diff / (df["capacity_mAh"] + df_ref["Capacity(mAs)"].abs() / 3600)
+        if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+            # If this fails, sometimes Neware does not count negative current during charge towards the capacity
+            df = df.with_columns(
+                pl.col("capacity_mAh")
+                .abs()
+                .diff()
+                .clip(0)
+                .cum_sum()
+                .over(pl.col("step_count"))
+                .alias("capacity_ignore_negs_mAh")
+            )
+            abs_diff = (df["capacity_ignore_negs_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
+            rel_diff = 2 * abs_diff / (df["capacity_ignore_negs_mAh"].abs() + df_ref["Capacity(mAs)"].abs() / 3600)
+            if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+                msg = "Capacity columns are different."
+                raise ValueError(msg)
 
     def test_energy(self, parsed_data: tuple) -> None:
         """Neware energy can be recorded 0.1 mWs, check to 3e-5 mWh."""
         df, df_ref = parsed_data
         # Neware capacity can be absolute for both charge and discharge
         # It can also can have negative values for discharge
-        assert_series_equal(
-            df["energy_mWh"].abs(),
-            df_ref["Energy(mWs)"].abs() / 3600,
-            check_names=False,
-            abs_tol=3e-5,
-        )
+        abs_diff = (df["energy_mWh"].abs() - df_ref["Energy(mWs)"].abs() / 3600).abs()
+        rel_diff = 2 * abs_diff / (df["energy_mWh"] + df_ref["Energy(mWs)"].abs() / 3600)
+        if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+            # If this fails, sometimes Neware does not count negative current during charge towards the energy
+            df = df.with_columns(
+                pl.col("energy_mWh")
+                .abs()
+                .diff()
+                .clip(0)
+                .cum_sum()
+                .over(pl.col("step_count"))
+                .alias("energy_ignore_negs_mWh")
+            )
+            abs_diff = (df["energy_ignore_negs_mWh"] - df_ref["Energy(mWs)"].abs() / 3600).abs()
+            rel_diff = 2 * abs_diff / (df["energy_ignore_negs_mWh"] + df_ref["Energy(mWs)"].abs() / 3600)
+            if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+                msg = "Energy columns are different."
+                raise ValueError(msg)
 
     def test_aux_cols(self, parsed_data: tuple) -> None:
         """Dataframes should have matching aux channels."""

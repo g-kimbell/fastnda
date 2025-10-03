@@ -36,6 +36,20 @@ df = df.to_pandas()
 ```
 You will need pandas and pyarrow installed for this.
 
+## Differences between BTSDA and fastnda
+
+This package generally adheres very closely to the outputs from BTSDA, but there are some subtle differences aside from column names:
+- Capacity and energy
+  - In Neware, capacity and energy can have separate columns for charge and discharge, and both can be positive
+  - In fastnda, capacity and energy are one column, charge is positive and discharge is negative
+  - In fastnda, a negative current during charge will count negatively to the capacity, in Neware it is ignored
+- Cycle count
+  - In some Neware files, cycles are only counted when the step index goes backwards, this is an inaccurate definition
+  - By default in fastnda, a cycle is when a charge and discharge step have been completed (or discharge then charge)
+  - The original behaviour can be accessed from fastnda, but is not generally recommended
+- Status codes
+  - Neware sometimes uses "DChg" and sometimes "Dchg" for discharge, fastnda always uses "DChg"
+
 ## Contributions
 
 Contributions are very welcome.
