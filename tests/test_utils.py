@@ -1,6 +1,7 @@
 """Test utils module."""
 
 import polars as pl
+import pytest
 from polars.testing import assert_series_equal
 
 from fastnda.utils import _count_changes, _generate_cycle_number, _id_first_state
@@ -81,3 +82,11 @@ class TestUtils:
             _generate_cycle_number(df, cycle_mode="auto")["cycle_count"],
             _generate_cycle_number(df, cycle_mode="chg")["cycle_count"],
         )
+
+    def test_generate_cycle_number_error(self) -> None:
+        """Test generating cycle numbers."""
+        df = pl.DataFrame(
+            {"status": [4, 4, 4, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 4, 4, 1, 1, 2, 2, 2, 1, 1, 2, 2, 1, 2, 1, 2]}
+        )
+        with pytest.raises(KeyError):
+            _generate_cycle_number(df, cycle_mode="invalid")

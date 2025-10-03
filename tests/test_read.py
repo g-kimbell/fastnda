@@ -35,6 +35,22 @@ def parsed_data(file_pair: tuple[Path, Path]) -> tuple[pl.DataFrame, pl.DataFram
 class TestRead:
     """Compared parsed data to reference from BTSDA."""
 
+    def test_generate_cycle_number(self) -> None:
+        """Test generating cycle numbers on just one file."""
+        test_file = Path(__file__).parent / "test_data" / "nw4-120-1-6-53.ndax"
+        df1 = fastnda.read(test_file, software_cycle_number=False)
+        df2 = fastnda.read(test_file, software_cycle_number=True, cycle_mode="chg")
+        status_mapping = {v: k for k, v in state_dict.items()}
+        df1 = df1.with_columns(pl.col("status").replace_strict(status_mapping, return_dtype=pl.Int32))
+        df1 = _generate_cycle_number(df1, "chg")
+        assert_series_equal(df1["cycle_count"], df2["cycle_count"])
+
+    def test_wrong_filetype(self) -> None:
+        """Test using the wrong file."""
+        test_file = Path(r"wrong_file.csv")
+        with pytest.raises(ValueError):
+            fastnda.read(test_file)
+
     def test_file_columns(self, parsed_data: tuple) -> None:
         """Check that the expected columns are in the DataFrames."""
         df, df_ref = parsed_data
