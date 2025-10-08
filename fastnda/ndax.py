@@ -714,7 +714,7 @@ def _read_ndc_17_filetype_7(buf: bytes) -> pl.DataFrame:
     return _bytes_to_df(buf, dtype, 132, 64).with_columns(
         [
             pl.col("cycle_count") + 1,
-            _count_changes(pl.col("step_index")).alias("step_count"),
+            pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("step_count"),
         ]
     )
 
