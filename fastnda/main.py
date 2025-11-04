@@ -9,7 +9,7 @@ import polars as pl
 from fastnda.dicts import dtype_dict
 from fastnda.nda import read_nda, read_nda_metadata
 from fastnda.ndax import read_ndax, read_ndax_metadata
-from fastnda.utils import _generate_cycle_number, state_dict
+from fastnda.utils import _drop_empty_rows, _generate_cycle_number, state_dict
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,9 @@ def read(
     if "unix_time_s" in df.columns:
         cols += [pl.from_epoch(pl.col("unix_time_s"), time_unit="s").alias("timestamp")]
     df = df.with_columns(cols)
+
+    # Drop empty voltage/current rows
+    df = _drop_empty_rows(df)
 
     # Ensure columns have correct data types
     df = df.with_columns([pl.col(name).cast(dtype_dict[name]) for name in df.columns if name in dtype_dict])

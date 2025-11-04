@@ -806,9 +806,8 @@ def _bytes_to_df(
         arr = arr[arr["step_index"] != 0]
         return pl.DataFrame(arr)
 
-    # If data file, remove 0.0 voltage rows and add Index column
+    # If data file, add Index column (drop empty rows at the end)
     if "voltage_V" in arr.dtype.names:
-        arr = arr[arr["voltage_V"] != 0]
         return pl.DataFrame(arr).with_columns(
             [
                 pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("index"),

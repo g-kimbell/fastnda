@@ -65,3 +65,10 @@ def _id_first_state(df: pl.DataFrame) -> Literal["chg", "dchg"]:
     if not filtered.is_empty() and filtered[0, "status"] in charge_keys:
         return "chg"
     return "dchg"
+
+
+def _drop_empty_rows(df: pl.DataFrame) -> pl.DataFrame:
+    """Drop rows with zero voltage and current."""
+    return df.remove(
+        (pl.col("voltage_V") == 0) & (pl.col("current_mA") == 0),
+    )
