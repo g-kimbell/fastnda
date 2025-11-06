@@ -260,20 +260,21 @@ def _read_nda_130_91(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
     # In BTS9.1, data and aux are in the same rows
     mask = (arr[:, 0] == 85) & (arr[:, 8:12].view(np.uint32) != 0).flatten()
     dtype_list = [
-        ("_pad1", "V2"),  # 0-1
-        ("step_index", np.uint8),  # 2
-        ("status", np.uint8),  # 3
-        ("cycle_count", np.uint32),  # 4-7
-        ("index", np.uint32),  # 8-11
-        ("step_time_s", np.uint32),  # 12-15
-        ("time_ns", np.uint32),  # 16-19
-        ("current_mA", np.float32),  # 20-23
-        ("voltage_V", np.float32),  # 24-27
-        ("capacity_mAs", np.float32),  # 28-31
-        ("energy_mWs", np.float32),  # 32-35
-        ("_pad3", "V8"),  # 36-43
-        ("unix_time_s", np.uint32),  # 44-47
-        ("uts_ns", np.uint32),  # 48-51
+        ("_pad1", "V2"),
+        ("step_index", np.uint8),
+        ("status", np.uint8),
+        ("_pad2", "V4"),
+        ("index", np.uint32),
+        ("total_time_s", np.uint32),
+        ("time_ns", np.uint32),
+        ("current_mA", np.float32),
+        ("voltage_V", np.float32),
+        ("capacity_mAs", np.float32),
+        ("energy_mWs", np.float32),
+        ("cycle_count", np.uint32),
+        ("_pad3", "V4"),
+        ("unix_time_s", np.uint32),
+        ("uts_ns", np.uint32),
     ]
     if record_len > 52:
         dtype_list.append(("_pad4", f"V{record_len - 52}"))
@@ -291,12 +292,24 @@ def _read_nda_130_91(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
             pl.col("capacity_mAs").clip(upper_bound=0).abs().alias("discharge_capacity_mAh") / 3600,
             pl.col("energy_mWs").clip(lower_bound=0).alias("charge_energy_mWh") / 3600,
             pl.col("energy_mWs").clip(upper_bound=0).abs().alias("discharge_energy_mWh") / 3600,
-            (pl.col("step_time_s") + pl.col("time_ns") / 1e9).cast(pl.Float32).alias("step_time_s"),
+            (pl.col("total_time_s") + pl.col("time_ns") / 1e9).cast(pl.Float32),
             (pl.col("unix_time_s") + pl.col("uts_ns") / 1e9).alias("unix_time_s"),
+            pl.col("cycle_count") + 1,
             _count_changes(pl.col("step_index")).alias("step_count"),
         ]
     )
-    data_df = data_df.drop(["unix_time_s", "uts_ns", "energy_mWs", "capacity_mAs", "time_ns"])
+    # Need to calculate step times - not included in this NDA
+    max_df = (
+        data_df.group_by("step_count")
+        .agg(pl.col("total_time_s").max().alias("max_total_time_s"))
+        .sort("step_count")
+        .with_columns(pl.col("max_total_time_s").shift(1).fill_null(0))
+    )
+
+    data_df = data_df.join(max_df, on="step_count", how="left").with_columns(
+        (pl.col("total_time_s") - pl.col("max_total_time_s")).alias("step_time_s")
+    )
+    data_df = data_df.drop(["uts_ns", "energy_mWs", "capacity_mAs", "time_ns", "max_total_time_s"])
 
     # If the record length is 56, then there is an additional temperature column
     # Read into separate DataFrame and merge later for compatibility with other versions
