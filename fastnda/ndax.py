@@ -522,7 +522,7 @@ def _read_ndc_11_filetype_18(buf: bytes) -> pl.DataFrame:
             ]
         )
         .drop("uts_ms")
-        .unique(subset="index", keep="last")  # Assume same rule as 14 - not sure without data
+        .unique(subset="index", keep="first")
     )
 
 
@@ -601,7 +601,7 @@ def _read_ndc_14_filetype_18(buf: bytes) -> pl.DataFrame:
             ]
         )
         .drop("uts_ms")
-        .unique(subset="index", keep="last")  # Seems like this file type keeps the last of duplicates, 17 is different
+        .unique(subset="index", keep="first")
     )
 
 
@@ -682,17 +682,21 @@ def _read_ndc_16_filetype_18(buf: bytes) -> pl.DataFrame:
             ("_pad3", "V53"),
         ]
     )
-    df = _bytes_to_df(buf, dtype, 132, 64)
-    return df.with_columns(
-        [
-            pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,
-            (
-                pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
-                / 3600
-            ).cast(pl.Float32),  # mAs|mWs -> mAh|mWh
-            (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
-        ]
-    ).drop("uts_ms")
+    return (
+        _bytes_to_df(buf, dtype, 132, 64)
+        .with_columns(
+            [
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,
+                (
+                    pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
+                    / 3600
+                ).cast(pl.Float32),  # mAs|mWs -> mAh|mWh
+                (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
+            ]
+        )
+        .drop("uts_ms")
+        .unique(subset="index", keep="first")
+    )
 
 
 def _read_ndc_17_filetype_1(buf: bytes) -> pl.DataFrame:
@@ -750,7 +754,7 @@ def _read_ndc_17_filetype_18(buf: bytes) -> pl.DataFrame:
             ]
         )
         .drop("uts_ms")
-        .unique(subset="index", keep="first")  # Seems like this file type keeps the last of duplicates, 14 is different
+        .unique(subset="index", keep="first")
     )
 
 
