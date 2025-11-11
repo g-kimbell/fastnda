@@ -27,7 +27,7 @@ class TestUtils:
         #     2: "CC_DChg",
         #     3: "CV_Chg",
         #     4: "Rest",
-        #     5: "cycle_count",
+        #     5: "Cycle",
         #     7: "CCCV_Chg",
         #     8: "CP_DChg",
         #     9: "CP_Chg",
