@@ -332,32 +332,32 @@ def _read_ndc_2_filetype_5(buf: bytes) -> pl.DataFrame:
 def _read_ndc_5_filetype_1(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
-            ("_pad1", "V8"),  # 0-7
-            ("index", np.uint32),  # 8-11
-            ("cycle_count", np.uint32),  # 12-15
-            ("step_index", np.uint8),  # 16
-            ("status", np.uint8),  # 17
-            ("_pad2", "V5"),  # 18-22
-            ("step_time_s", np.uint64),  # 23-30
-            ("voltage_V", np.int32),  # 31-34
-            ("current_mA", np.int32),  # 35-38
-            ("_pad3", "V4"),  # 39-42
-            ("charge_capacity_mAh", np.int64),  # 43-50
-            ("discharge_capacity_mAh", np.int64),  # 51-58
-            ("charge_energy_mWh", np.int64),  # 59-66
-            ("discharge_energy_mWh", np.int64),  # 67-74
-            ("Y", np.uint16),  # 75-76
-            ("M", np.uint8),  # 77
-            ("D", np.uint8),  # 78
-            ("h", np.uint8),  # 79
-            ("m", np.uint8),  # 80
-            ("s", np.uint8),  # 81
-            ("range", np.int32),  # 82-85
-            ("_pad4", "V1"),  # 86
+            ("_pad1", "V1"),
+            ("index", np.uint32),
+            ("cycle_count", np.uint32),
+            ("step_index", np.uint8),
+            ("status", np.uint8),
+            ("_pad2", "V5"),
+            ("step_time_s", np.uint64),
+            ("voltage_V", np.int32),
+            ("current_mA", np.int32),
+            ("_pad3", "V4"),
+            ("charge_capacity_mAh", np.int64),
+            ("discharge_capacity_mAh", np.int64),
+            ("charge_energy_mWh", np.int64),
+            ("discharge_energy_mWh", np.int64),
+            ("Y", np.uint16),
+            ("M", np.uint8),
+            ("D", np.uint8),
+            ("h", np.uint8),
+            ("m", np.uint8),
+            ("s", np.uint8),
+            ("range", np.int32),
+            ("_pad4", "V8"),
         ]
     )
     return (
-        _bytes_to_df(buf, dtype, 125, 56)
+        _bytes_to_df(buf, dtype, 132, 49)
         .with_columns(
             [
                 pl.col("cycle_count") + 1,
@@ -390,17 +390,17 @@ def _read_ndc_5_filetype_1(buf: bytes) -> pl.DataFrame:
 def _read_ndc_5_filetype_5(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
-            ("_pad2", "V8"),  # 4-7
-            ("index", np.uint32),  # 8-11
-            ("_pad3", "V19"),  # 12 - 30
-            ("voltage_V", np.int32),  # 31-34
-            ("_pad4", "V6"),  # 35-40
-            ("temperature_degC", np.int16),  # 41-42
-            ("temperature_setpoint_degC", np.int16),  # 43-44
-            ("_pad5", "V42"),  # 45-86
+            ("_pad2", "V1"),
+            ("index", np.uint32),
+            ("_pad3", "V19"),
+            ("voltage_V", np.int32),
+            ("_pad4", "V6"),
+            ("temperature_degC", np.int16),
+            ("temperature_setpoint_degC", np.int16),
+            ("_pad5", "V49"),
         ]
     )
-    df = _bytes_to_df(buf, dtype, 125, 56).with_columns(
+    df = _bytes_to_df(buf, dtype, 132, 49).with_columns(
         pl.col("voltage_V").cast(pl.Float32) * 1e-4,
         pl.col("temperature_degC").cast(pl.Float32) * 0.1,
         pl.col("temperature_setpoint_degC").cast(pl.Float32) * 0.1,
