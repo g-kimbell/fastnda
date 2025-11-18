@@ -271,7 +271,7 @@ def _read_ndc_2_filetype_1(buf: bytes) -> pl.DataFrame:
         ]
     )
     return (
-        _bytes_to_df(buf, dtype, 5, 37, record_size=512, file_header_size=512)
+        _bytes_to_df(buf, dtype, 5, 37, record_size=512, file_header_size=512, use_bitmask=False)
         .with_columns(
             [
                 pl.col("cycle_count") + 1,
@@ -315,7 +315,7 @@ def _read_ndc_2_filetype_5(buf: bytes) -> pl.DataFrame:
             ("_pad5", "V49"),  # 45-93
         ]
     )
-    df = _bytes_to_df(buf, dtype, 5, 37, record_size=512, file_header_size=512).with_columns(
+    df = _bytes_to_df(buf, dtype, 5, 37, record_size=512, file_header_size=512, use_bitmask=False).with_columns(
         pl.col("voltage_V").cast(pl.Float32) / 10000,
         pl.col("temperature_degC").cast(pl.Float32) * 0.1,
         pl.col("temperature_setpoint_degC").cast(pl.Float32) * 0.1,
@@ -421,7 +421,7 @@ def _read_ndc_11_filetype_1(buf: bytes) -> pl.DataFrame:
             ("current_mA", "<f4"),
         ]
     )
-    return _bytes_to_df(buf, dtype, 132, 4).with_columns(
+    return _bytes_to_df(buf, dtype, 132, 4, add_index=True).with_columns(
         [
             pl.col("voltage_V") * 1e-4,  # 0.1mV -> V
         ]
@@ -430,16 +430,16 @@ def _read_ndc_11_filetype_1(buf: bytes) -> pl.DataFrame:
 
 def _read_ndc_11_filetype_5(buf: bytes) -> pl.DataFrame:
     header = 4096
-
-    if buf[header + 132 : header + 133] == b"\x65":
+    identifier = buf[header + 132 : header + 133]
+    if identifier == b"\x65":
         dtype = np.dtype(
             [
-                ("mask", "<i1"),
+                ("_mask", "<i1"),
                 ("voltage_V", "<f4"),
                 ("temperature_degC", "<i2"),
             ]
         )
-        df = _bytes_to_df(buf, dtype, 132, 2, mask=101).with_columns(
+        df = _bytes_to_df(buf, dtype, 132, 2).with_columns(
             [
                 pl.col("voltage_V") * 1e-4,  # 0.1 mV -> V
                 pl.col("temperature_degC").cast(pl.Float32) * 0.1,  # 0.1'C -> 'C
@@ -450,7 +450,7 @@ def _read_ndc_11_filetype_5(buf: bytes) -> pl.DataFrame:
         cols_to_drop = [col for col in ["voltage_V", "temperature_degC"] if df.filter(pl.col(col) != 0).is_empty()]
         return df.select(pl.exclude(cols_to_drop))
 
-    if buf[header + 132 : header + 133] == b"\x74":
+    if identifier == b"\x74":
         dtype = np.dtype(
             [
                 ("_pad1", "V1"),
@@ -533,7 +533,7 @@ def _read_ndc_14_filetype_1(buf: bytes) -> pl.DataFrame:
             ("current_mA", "<f4"),
         ]
     )
-    return _bytes_to_df(buf, dtype, 132, 4).with_columns(
+    return _bytes_to_df(buf, dtype, 132, 4, add_index=True).with_columns(
         [
             pl.col("current_mA") * 1000,
         ]
@@ -546,7 +546,7 @@ def _read_ndc_14_filetype_5(buf: bytes) -> pl.DataFrame:
             ("?", "<f4"),  # Column name is assigned later from TestInfo.xml
         ]
     )
-    return _bytes_to_df(buf, dtype, 132, 4).with_columns(
+    return _bytes_to_df(buf, dtype, 132, 4, add_index=True).with_columns(
         [
             pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("index"),
         ]
@@ -612,7 +612,7 @@ def _read_ndc_16_filetype_1(buf: bytes) -> pl.DataFrame:
             ("current_mA", "<f4"),
         ]
     )
-    return _bytes_to_df(buf, dtype, 132, 4).with_columns(
+    return _bytes_to_df(buf, dtype, 132, 4, add_index=True).with_columns(
         [
             pl.col("voltage_V") / 10000,
             pl.col("current_mA"),
@@ -625,12 +625,12 @@ def _read_ndc_16_filetype_5(buf: bytes) -> pl.DataFrame:
     if buf[header + 132 : header + 133] == b"\x65":
         dtype = np.dtype(
             [
-                ("mask", "<i1"),
+                ("_mask", "<i1"),
                 ("voltage_V", "<f4"),
                 ("temperature_degC", "<i2"),
             ]
         )
-        df = _bytes_to_df(buf, dtype, 132, 2, mask=101).with_columns(
+        df = _bytes_to_df(buf, dtype, 132, 2).with_columns(
             [
                 pl.col("voltage_V") / 10000,  # 0.1 mV -> V
                 pl.col("temperature_degC").cast(pl.Float32) * 0.1,  # 0.1'C -> 'C
@@ -765,7 +765,9 @@ def _bytes_to_df(
     record_footer_size: int,
     record_size: int = 4096,
     file_header_size: int = 4096,
-    mask: int | None = None,
+    *,
+    use_bitmask: bool = True,
+    add_index: bool = False,
 ) -> pl.DataFrame:
     """Read bytes into a polars DataFrame.
 
@@ -776,8 +778,8 @@ def _bytes_to_df(
         record_footer_size: Size of the record footer in bytes.
         record_size: Total size of a single record in bytes.
         file_header_size: Size of the file header in bytes.
-        mask (optional): Mask to filter, assumes a column named
-            "mask" and keeps rows where "mask" equals this value.
+        use_bitmask (default True): Whether to use bitmask to filter data.
+        add_index (default False): Whether to add an index column, used for filetype 1.
 
     Returns:
         DataFrame containing the records.
@@ -785,41 +787,34 @@ def _bytes_to_df(
     """
     # Read entire file into 1 byte array nrecords x record_size
     num_records = (len(buf) - file_header_size) // record_size
-    arr = np.frombuffer(buf[file_header_size:], dtype=np.int8).reshape((num_records, record_size))
+    arr = np.frombuffer(buf[file_header_size:], dtype=np.uint8).reshape((num_records, record_size))
+
+    # Slice and unpack the bitmask
+    if use_bitmask:
+        rows_per_record = (record_size - record_header_size - record_footer_size) // dtype.itemsize
+        bitmask_start = 4
+        bits_in_bitmask = int(np.ceil(rows_per_record / 8))
+        bitmask = arr[:, bitmask_start : bitmask_start + bits_in_bitmask]
+        bitmask = np.unpackbits(bitmask, bitorder="little", axis=1).astype(bool)[:, :rows_per_record].flatten()
+
     # Slice the header and footer
     arr = arr[:, record_header_size:-record_footer_size]
+
     # Remove padding columns
     useful_cols = [name for name in dtype.names if not name.startswith("_")]
     dtype_no_pad = dtype[useful_cols]
     arr = arr.view(dtype=dtype_no_pad)
+
     # Flatten
-    arr = arr.reshape(-1)
+    arr = arr.flatten()
 
-    # If a mask is provided, filter the array
-    if mask is not None and "mask" in arr.dtype.names:
-        arr = arr[arr["mask"] == mask]
-        return pl.DataFrame(arr).drop("mask")
+    if not use_bitmask:  # It should have an index column, filter where 0
+        return pl.DataFrame(arr).filter(pl.col("index") != 0)
 
-    # If runInfo file, remove 0 index rows
-    if "index" in arr.dtype.names:
-        arr = arr[arr["index"] != 0]
-        return pl.DataFrame(arr)
-
-    # If step file, remove 0 step index rows
-    if "step_index" in arr.dtype.names:
-        arr = arr[arr["step_index"] != 0]
-        return pl.DataFrame(arr)
-
-    # If data file, remove 0.0 voltage rows and add Index column
-    if "voltage_V" in arr.dtype.names:
-        arr = arr[arr["voltage_V"] != 0]
-        return pl.DataFrame(arr).with_columns(
-            [
-                pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("index"),
-            ]
-        )
-
-    return pl.DataFrame(arr)
+    df = pl.DataFrame(arr)
+    if add_index:
+        df = df.with_columns(pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("index"))
+    return df.filter(bitmask)
 
 
 # Map NDC (version, filetype) to handler functions
