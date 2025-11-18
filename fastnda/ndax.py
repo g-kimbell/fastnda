@@ -271,7 +271,7 @@ def _read_ndc_2_filetype_1(buf: bytes) -> pl.DataFrame:
         ]
     )
     return (
-        _bytes_to_df(buf, dtype, 5, 37, record_size=512, file_header_size=512, use_bitmask=False)
+        _bytes_to_df(buf, dtype, 5, 37, record_size=512, use_bitmask=False)
         .with_columns(
             [
                 pl.col("cycle_count") + 1,
@@ -315,7 +315,7 @@ def _read_ndc_2_filetype_5(buf: bytes) -> pl.DataFrame:
             ("_pad5", "V49"),  # 45-93
         ]
     )
-    df = _bytes_to_df(buf, dtype, 5, 37, record_size=512, file_header_size=512, use_bitmask=False).with_columns(
+    df = _bytes_to_df(buf, dtype, 5, 37, record_size=512, use_bitmask=False).with_columns(
         pl.col("voltage_V").cast(pl.Float32) / 10000,
         pl.col("temperature_degC").cast(pl.Float32) * 0.1,
         pl.col("temperature_setpoint_degC").cast(pl.Float32) * 0.1,
@@ -764,7 +764,7 @@ def _bytes_to_df(
     record_header_size: int,
     record_footer_size: int,
     record_size: int = 4096,
-    file_header_size: int = 4096,
+    file_header_records: int = 1,
     *,
     use_bitmask: bool = True,
     add_index: bool = False,
@@ -777,7 +777,7 @@ def _bytes_to_df(
         record_header_size: Size of the record header in bytes.
         record_footer_size: Size of the record footer in bytes.
         record_size: Total size of a single record in bytes.
-        file_header_size: Size of the file header in bytes.
+        file_header_records: Number of records in the file header.
         use_bitmask (default True): Whether to use bitmask to filter data.
         add_index (default False): Whether to add an index column, used for filetype 1.
 
@@ -786,8 +786,8 @@ def _bytes_to_df(
 
     """
     # Read entire file into 1 byte array nrecords x record_size
-    num_records = (len(buf) - file_header_size) // record_size
-    arr = np.frombuffer(buf[file_header_size:], dtype=np.uint8).reshape((num_records, record_size))
+    num_records = len(buf) // record_size - file_header_records
+    arr = np.frombuffer(buf[record_size * file_header_records :], dtype=np.uint8).reshape((num_records, record_size))
 
     # Slice and unpack the bitmask
     if use_bitmask:
