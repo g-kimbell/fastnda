@@ -55,6 +55,17 @@ def read(
     ]
     df = df.with_columns(cols)
 
+    if "total_time_s" not in df.columns:
+        max_df = (
+            df.group_by("step_count")
+            .agg(pl.col("step_time_s").max().alias("max_step_time_s"))
+            .sort("step_count")
+            .with_columns(pl.col("max_step_time_s").shift(1).fill_null(0).cum_sum())
+        )
+        df = df.join(max_df, on="step_count", how="left").with_columns(
+            (pl.col("step_time_s") + pl.col("max_step_time_s")).alias("total_time_s")
+        )
+
     # Ensure columns have correct data types
     df = df.with_columns([pl.col(name).cast(dtype_dict[name]) for name in df.columns if name in dtype_dict])
 

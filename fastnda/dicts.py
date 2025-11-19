@@ -31,7 +31,7 @@ dtype_dict = {
     "current_mA": pl.Float32,
     "unix_time_s": pl.Float64,
     "step_time_s": pl.Float64,
-    "timestamp": pl.Datetime("us", time_zone="UTC"),
+    "total_time_s": pl.Float64,
     "cycle_count": pl.UInt32,
     "step_count": pl.UInt32,
     "step_index": pl.UInt32,
