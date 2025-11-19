@@ -53,8 +53,6 @@ def read(
         (pl.col("charge_capacity_mAh") - pl.col("discharge_capacity_mAh")).alias("capacity_mAh"),
         (pl.col("charge_energy_mWh") - pl.col("discharge_energy_mWh")).alias("energy_mWh"),
     ]
-    if "unix_time_s" in df.columns:
-        cols += [pl.from_epoch(pl.col("unix_time_s"), time_unit="s").alias("timestamp")]
     df = df.with_columns(cols)
 
     # Ensure columns have correct data types

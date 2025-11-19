@@ -60,7 +60,6 @@ class TestRead:
             "current_mA",
             "unix_time_s",
             "step_time_s",
-            "timestamp",
             "cycle_count",
             "step_count",
             "step_index",
@@ -160,13 +159,6 @@ class TestRead:
             abs_tol=5e-7,
         )
 
-        # Datetime should agree with uts
-        assert_series_equal(
-            df["timestamp"].cast(pl.Float64) * 1e-6,
-            df["unix_time_s"],
-            check_names=False,
-            abs_tol=5e-7,
-        )
         # Cannot cycle cells before Neware was founded in 1998
         assert df["unix_time_s"].min() > 883609200
 
