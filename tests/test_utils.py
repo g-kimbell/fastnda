@@ -42,21 +42,21 @@ class TestUtils:
         #     26: "CPCV_DChg",
         #     27: "CPCV_Chg",
 
-        df = pl.DataFrame({"status": [4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 2, 2, 2, 1, 1, 1]})
+        df = pl.DataFrame({"step_type": [4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 2, 2, 2, 1, 1, 1]})
         assert _id_first_state(df) == "chg"
-        df = pl.DataFrame({"status": [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]})
+        df = pl.DataFrame({"step_type": [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]})
         assert _id_first_state(df) == "dchg"  # Defaults to discharge
-        df = pl.DataFrame({"status": [4, 4, 4, 4, 4, 4, 4, 9, 27, 1, 5, 4, 3, 8, 5]})
+        df = pl.DataFrame({"step_type": [4, 4, 4, 4, 4, 4, 4, 9, 27, 1, 5, 4, 3, 8, 5]})
         assert _id_first_state(df) == "chg"
-        df = pl.DataFrame({"status": [17, 17, 17, 17, 17]})
+        df = pl.DataFrame({"step_type": [17, 17, 17, 17, 17]})
         assert _id_first_state(df) == "dchg"  # SIM doesn't count as charge or discharge
-        df = pl.DataFrame({"status": [22, 22, 22, 22, 22, 21, 13, 13, 4, 4, 45, 20]})
+        df = pl.DataFrame({"step_type": [22, 22, 22, 22, 22, 21, 13, 13, 4, 4, 45, 20]})
         assert _id_first_state(df) == "dchg"
 
     def test_generate_cycle_number_chg(self) -> None:
         """Test generating cycle numbers."""
         df = pl.DataFrame(
-            {"status": [4, 4, 4, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 4, 4, 1, 1, 2, 2, 2, 1, 1, 2, 2, 1, 2, 1, 2]}
+            {"step_type": [4, 4, 4, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 4, 4, 1, 1, 2, 2, 2, 1, 1, 2, 2, 1, 2, 1, 2]}
         )
         expect = pl.Series(
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5], dtype=pl.UInt32
@@ -66,7 +66,7 @@ class TestUtils:
     def test_generate_cycle_number_dchg(self) -> None:
         """Test generating cycle numbers."""
         df = pl.DataFrame(
-            {"status": [4, 4, 4, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 4, 4, 1, 1, 2, 2, 2, 1, 1, 2, 2, 1, 2, 1, 2]}
+            {"step_type": [4, 4, 4, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 4, 4, 1, 1, 2, 2, 2, 1, 1, 2, 2, 1, 2, 1, 2]}
         )
         expect = pl.Series(
             [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 5, 5, 6], dtype=pl.UInt32
@@ -76,7 +76,7 @@ class TestUtils:
     def test_generate_cycle_number_auto(self) -> None:
         """Test generating cycle numbers."""
         df = pl.DataFrame(
-            {"status": [4, 4, 4, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 4, 4, 1, 1, 2, 2, 2, 1, 1, 2, 2, 1, 2, 1, 2]}
+            {"step_type": [4, 4, 4, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 4, 4, 1, 1, 2, 2, 2, 1, 1, 2, 2, 1, 2, 1, 2]}
         )
         assert_series_equal(
             _generate_cycle_number(df, cycle_mode="auto")["cycle_count"],
@@ -86,7 +86,7 @@ class TestUtils:
     def test_generate_cycle_number_error(self) -> None:
         """Test generating cycle numbers."""
         df = pl.DataFrame(
-            {"status": [4, 4, 4, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 4, 4, 1, 1, 2, 2, 2, 1, 1, 2, 2, 1, 2, 1, 2]}
+            {"step_type": [4, 4, 4, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 4, 4, 1, 1, 2, 2, 2, 1, 1, 2, 2, 1, 2, 1, 2]}
         )
         with pytest.raises(KeyError):
             _generate_cycle_number(df, cycle_mode="invalid")

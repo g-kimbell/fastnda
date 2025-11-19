@@ -39,8 +39,8 @@ def _generate_cycle_number(
         msg = "Cycle_Mode %s not recognized. Supported options are 'chg', 'dchg', and 'auto'."
         raise KeyError(msg, cycle_mode)
 
-    incs = df["status"].is_in(inkeys).to_numpy()
-    flags = df["status"].is_in(offkeys).to_numpy()
+    incs = df["step_type"].is_in(inkeys).to_numpy()
+    flags = df["step_type"].is_in(offkeys).to_numpy()
     cycles = np.zeros(len(df), dtype=np.uint32)
     cycles[0] = np.uint32(1)
     flag = False
@@ -61,7 +61,7 @@ def _count_changes(series: pl.Series) -> pl.Series:
 def _id_first_state(df: pl.DataFrame) -> Literal["chg", "dchg"]:
     """Identify the first non-rest state in the DataFrame."""
     # Filter on non-rest keys, check first row
-    filtered = df.filter(pl.col("status").is_in(charge_keys + discharge_keys)).head(1)
-    if not filtered.is_empty() and filtered[0, "status"] in charge_keys:
+    filtered = df.filter(pl.col("step_type").is_in(charge_keys + discharge_keys)).head(1)
+    if not filtered.is_empty() and filtered[0, "step_type"] in charge_keys:
         return "chg"
     return "dchg"

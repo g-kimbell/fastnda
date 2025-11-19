@@ -46,10 +46,10 @@ def read(
     if software_cycle_number:
         df = _generate_cycle_number(df, cycle_mode)
 
-    # round time to ms, Status -> categories, uts -> Timestamp
+    # round time to ms, step_type -> categories, uts -> Timestamp
     cols = [
         pl.col("step_time_s").round(3),
-        pl.col("status").replace_strict(state_dict, default=None).alias("status"),
+        pl.col("step_type").replace_strict(state_dict, default=None).alias("step_type"),
         (pl.col("charge_capacity_mAh") - pl.col("discharge_capacity_mAh")).alias("capacity_mAh"),
         (pl.col("charge_energy_mWh") - pl.col("discharge_energy_mWh")).alias("energy_mWh"),
     ]

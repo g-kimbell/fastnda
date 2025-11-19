@@ -148,7 +148,7 @@ def _read_nda_29(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
             ("index", np.uint32),  # 2-5
             ("cycle_count", np.uint32),  # 6-9
             ("step_index", np.uint16),  # 10-11
-            ("status", np.uint8),  # 12
+            ("step_type", np.uint8),  # 12
             ("step_count", np.uint8),  # 13 (records jumps)
             ("step_time_s", np.uint64),  # 14-21
             ("voltage_V", np.int32),  # 22-25
@@ -243,7 +243,7 @@ def _read_nda_130_91(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
     dtype_list = [
         ("_pad1", "V2"),
         ("step_index", np.uint8),
-        ("status", np.uint8),
+        ("step_type", np.uint8),
         ("_pad2", "V4"),
         ("index", np.uint32),
         ("total_time_s", np.uint32),
@@ -330,7 +330,7 @@ def _read_nda_130_90(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
         [
             ("_pad1", "V9"),  # 0-8
             ("step_index", np.uint8),  # 9
-            ("status", np.uint8),  # 10
+            ("step_type", np.uint8),  # 10
             ("_pad2", "V5"),  # 11-15
             ("index", np.uint32),  # 16-19
             ("_pad3", "V8"),  # 20-27
