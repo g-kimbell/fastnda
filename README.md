@@ -8,7 +8,7 @@ This is an experimental fork refactored with a focus on speed, for those of us w
 
 ## Should I use this or NewareNDA?
 
-This is an experimental fork that has had less testing. NewareNDA is more mature and stable, and is still being actively maintained.
+FastNDA is an experimental fork. It is thoroughly tested, but the public API and dataframe columns may change before 1.0.0 release. NewareNDA is more mature and stable, and is still being actively maintained.
 
 If you are interested in parsing your data as fast as possible and are willing to help stress test this package, use FastNDA. If you need stability, stick with NewareNDA.
 
@@ -35,6 +35,16 @@ This returns a polars dataframe. If you would prefer to use pandas, you can do a
 df = df.to_pandas()
 ```
 You will need pandas and pyarrow installed for this.
+
+> [!NOTE]
+> If you want to write a to a file that uses pyarrow (e.g. parquet or feather) that can be read by both pandas and polars, you must convert to pandas first, e.g.:
+> ```python
+> df.to_pandas().to_parquet(filename, compression="brotli")
+> ```
+>
+> If you write directly from polars, polars categorical/enum columns are written in a way that is very fast and space efficient, but cannot be read by pandas.
+> 
+> This is an issue with pyarrow/pandas and is out of my control. Here, `brotli` compression mitigates most of the space cost of storing the these columns in a pandas-friendly way.
 
 ## Differences between BTSDA and fastnda
 
