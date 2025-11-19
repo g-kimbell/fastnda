@@ -774,12 +774,12 @@ def _bytes_to_df(
     Args:
         buf: Bytes object containing the binary data.
         dtype: Numpy dtype describing the record structure.
-        data_start_ind (default 132): Index in bytes of the start of the data in the record.
-        record_size (default 4096): Total size of a single record in bytes.
-        file_header_records (default 1): Number of records in the file header.
-        record_end_pad (default 1): Number of bytes at the end of the record that cannot contain data.
-        use_bitmask (default True): Whether to use bitmask to filter data.
-        add_index (default False): Whether to add an index column, used for filetype 1.
+        data_start_ind: Index in bytes of the start of the data in the record.
+        record_size: Total size of a single record in bytes.
+        file_header_records: Number of records in the file header.
+        record_end_pad: Number of bytes at the end of the record that cannot contain data.
+        use_bitmask: Whether to use bitmask to filter data.
+        add_index: Whether to add an index column, used for filetype 1.
 
     Returns:
         DataFrame containing the data, dropping columns starting with '_'.
