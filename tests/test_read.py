@@ -148,13 +148,28 @@ class TestRead:
     def test_total_time(self, parsed_data: tuple) -> None:
         """Total time should agree within 1 us."""
         df, df_ref = parsed_data
-        max_abs_diff = (df["total_time_s"] - df_ref["Total Time"]).abs().max()
-        if max_abs_diff > 5e-7:
-            # Maybe the test data has bad precision
-            if max_abs_diff < 0.01:
-                warnings.warn(f"Total time only matches within {max_abs_diff:.2e} s", stacklevel=2)
+        diff = (df["total_time_s"] - df_ref["Total Time"]).abs()
+
+        # BTSDA exported Total time changes precision over time
+        early_diff = diff.filter(df_ref["Total Time"] < 1800).max()
+        mid_diff = diff.filter((df_ref["Total Time"] > 1800) & (df_ref["Total Time"] < 1e6)).max()
+        late_diff = diff.filter(df_ref["Total Time"] > 1e6).max()
+
+        if late_diff is not None and late_diff > 1:
+            msg = f"Total time columns differ by up to {late_diff:.2e}"
+            raise ValueError(msg)
+        if mid_diff is not None and mid_diff > 0.1:
+            msg = f"Total time columns differ by up to {mid_diff:.2e}"
+            raise ValueError(msg)
+        if early_diff is None:
+            msg = "Could not get total time difference"
+            raise ValueError(msg)
+        if early_diff > 5e-7:
+            # Warn for up to 10 ms, fail for over 10 ms
+            if early_diff < 0.01:
+                warnings.warn(f"Total time only matches within {early_diff:.2e} s", stacklevel=2)
             else:
-                msg = f"Total time columns differ by up to {max_abs_diff:.2e}"
+                msg = f"Total time columns differ by up to {early_diff:.2e}"
                 raise ValueError(msg)
 
     def test_datetime(self, parsed_data: tuple) -> None:
