@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+import xmltodict
 from defusedxml import ElementTree
 
 from fastnda.dicts import (
@@ -124,30 +125,13 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
 
 def read_ndax_metadata(file: str | Path) -> dict[str, str | float]:
     """Read metadata from VersionInfo.xml and Step.xml in a Neware .ndax file."""
+    metadata = {}
     with zipfile.PyZipFile(str(file)) as zf:
-        metadata = {}
-        # Read version information
-        try:
-            version_info = zf.read("VersionInfo.xml").decode("gb2312")
-            config = ElementTree.fromstring(version_info).find("config/ZwjVersion")
-            if config is not None:
-                metadata["Server version"] = config.attrib["SvrVer"]
-                metadata["Client version"] = config.attrib["CurrClientVer"]
-                metadata["Control unit version"] = config.attrib["ZwjVersion"]
-                metadata["Tester version"] = config.attrib["MainXwjVer"]
-        except Exception:
-            logger.exception("Failed to read VersionInfo.xml")
-
-        # Read active mass
-        try:
-            step = zf.read("Step.xml").decode("gb2312")
-            scq = ElementTree.fromstring(step).find("config/Head_Info/SCQ")
-            if scq is not None:
-                active_mass = float(scq.attrib["Value"])
-                metadata["Active mass"] = active_mass / 1000
-        except Exception:
-            logger.exception("Failed to read Step.xml")
-
+        xml_files = [f for f in zf.namelist() if f.endswith(".xml")]
+        for xml_file in xml_files:
+            name = xml_file.split("/")[-1].split(".")[0]
+            xml_tree = ElementTree.fromstring(zf.read(xml_file).decode(errors="ignore")).find("config")
+            metadata[name] = xmltodict.parse(ElementTree.tostring(xml_tree).decode(), attr_prefix="")["config"]
     return metadata
 
 
