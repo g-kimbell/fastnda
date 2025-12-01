@@ -38,36 +38,22 @@ def read_nda(file: str | Path) -> pl.DataFrame:
         if mm.read(6) != b"NEWARE":
             msg = f"{file} does not appear to be a Neware file."
             raise ValueError(msg)
-        # Get the file version
+        # Get the NDA version
         nda_version = int(mm[14])
-        logger.info("Reading nda version %s", nda_version)
 
-        # Try to find server and client version info
-        version_loc = mm.find(b"BTSServer")
-        if version_loc != -1:
-            mm.seek(version_loc)
-            server = mm.read(50).strip(b"\x00").decode()
-            logger.info("Server version: %s", server)
-
-            mm.seek(50, 1)
-            client = mm.read(50).strip(b"\x00").decode()
-            logger.info("Client version: %s", client)
-        else:
-            logger.info("BTS version not found!")
-
-        # version specific settings
+        # Reading depends on the NDA version
         if nda_version == 29:
-            logger.info("Reading nda version 29")
+            logger.info("Reading NDA version 29")
             df, aux_df = _read_nda_29(mm)
         elif nda_version == 130:
-            if mm[1024:1025] == b"\x55":  # It is BTS 9.1
-                logger.info("Reading nda version 130 BTS9.1")
+            if mm[1024:1025] == b"\x55":
+                logger.info("Reading NDA version 130 BTS9.1")
                 df, aux_df = _read_nda_130_91(mm)
             else:
-                logger.info("Reading nda version 130 BTS9.0")
+                logger.info("Reading NDA version 130 BTS9.0")
                 df, aux_df = _read_nda_130_90(mm)
         else:
-            msg = f"nda version {nda_version} is not yet supported!"
+            msg = f"NDA version {nda_version} is not yet supported!"
             raise NotImplementedError(msg)
 
     # Drop duplicate indexes and sort
@@ -88,70 +74,66 @@ def read_nda(file: str | Path) -> pl.DataFrame:
     return df
 
 
-def read_nda_metadata(file: str | Path) -> dict[str, str | float]:
+def read_nda_metadata(file: str | Path) -> dict[str, str | int | float]:
     """Read metadata from a Neware .nda file."""
     file = Path(file)
     with file.open("rb") as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
 
-        if mm.read(6) != b"NEWARE":
-            msg = f"{file} does not appear to be a Neware file."
-            raise ValueError(msg)
-        metadata = {}
-        # Get the file version
-        metadata["nda_version"] = int(mm[14])
+    if mm.read(6) != b"NEWARE":
+        msg = f"{file} does not appear to be a Neware file."
+        raise ValueError(msg)
 
-        # Try to find server and client version info
-        version_loc = mm.find(b"BTSServer")
-        if version_loc != -1:
-            mm.seek(version_loc)
-            server = mm.read(50).strip(b"\x00").decode()
-            metadata["server_version"] = server
+    metadata: dict[str, int | str | float] = {}
 
-            mm.seek(50, 1)
-            client = mm.read(50).strip(b"\x00").decode()
-            metadata["client_version"] = client
-        else:
-            logger.info("BTS version not found!")
+    # Get the file version
+    metadata["nda_version"] = int(mm[14])
+
+    # Try to find server and client version info
+    version_loc = mm.find(b"BTSServer")
+    if version_loc != -1:
+        mm.seek(version_loc)
+        server = mm.read(50).strip(b"\x00").decode()
+        metadata["server_version"] = server
+
+        mm.seek(50, 1)
+        client = mm.read(50).strip(b"\x00").decode()
+        metadata["client_version"] = client
+    else:
+        logger.info("BTS version not found!")
+
+    # NDA 29 specific fields
+    if metadata["nda_version"] == 29:
+        metadata["active_mass_mg"] = int.from_bytes(mm[152:156], "little") / 1000
+        metadata["remarks"] = mm[2317:2417].decode("ASCII", errors="ignore").replace(chr(0), "").strip()
+
+    # NDA 130 specific fields
+    elif metadata["nda_version"] == 130:
+        # Identify footer
+        footer = mm.rfind(b"\x06\x00\xf0\x1d\x81\x00\x03\x00\x61\x90\x71\x90\x02\x7f\xff\x00", 1024)
+        if footer:
+            mm.seek(footer + 16)
+            buf = mm.read(499)
+            metadata["active_mass_mg"] = struct.unpack("<d", buf[-8:])[0]
+            metadata["remarks"] = buf[363:491].decode("ASCII").replace(chr(0), "").strip()
 
     return metadata
 
 
 def _read_nda_29(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Read nda version 29, return data and aux DataFrames."""
-    mm_size = mm.size()
-
-    # Get the active mass
-    [active_mass] = struct.unpack("<I", mm[152:156])
-    logger.info("Active mass: %s mg", active_mass / 1000)
-
-    try:
-        remarks = mm[2317:2417].decode("ASCII")
-        # Clean null characters
-        remarks = remarks.replace(chr(0), "").strip()
-        logger.info("Remarks: %s", remarks)
-    except UnicodeDecodeError:
-        logger.warning("Converting remark bytes into ASCII failed")
-        remarks = ""
-
-    # Identify the beginning of the data section
-    record_len = 86
-    identifier = b"\x00\x00\x00\x00\x55\x00"
+    # Identify the beginning of the data section - first byte 85 and index = 1
+    identifier = b"\x55\x00\x01\x00\x00\x00"
     header = mm.find(identifier)
     if header == -1:
-        msg = "File does not contain any valid records."
+        msg = "Could not find start of data section."
         raise EOFError(msg)
-    while (
-        ((mm[header + 4 + record_len] != 85) | (not _valid_record(mm[header + 4 : header + 4 + record_len])))
-        if header + 4 + record_len < mm_size
-        else False
-    ):
-        header = mm.find(identifier, header + 4)
-    mm.seek(header + 4)
 
     # Read data records
-    num_records = (len(mm) - header - 4) // record_len
-    arr = np.frombuffer(mm[header + 4 :], dtype=np.int8).reshape((num_records, record_len))
+    record_len = 86
+    num_records = (len(mm) - header) // record_len
+    arr = np.frombuffer(mm[header:], dtype=np.int8).reshape((num_records, record_len))
+
     # Remove rows where last 4 bytes are zero
     mask = (arr[:, 82:].view(np.int32) == 0).flatten()
     arr = arr[mask]
@@ -251,7 +233,6 @@ def _read_nda_29(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
 def _read_nda_130_91(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Read nda version 130 BTS9.1, return data and aux DataFrames."""
     record_len = mm.find(mm[1024:1026], 1026) - 1024  # Get record length
-    _read_footer(mm)  # Log metadata
     num_records = (len(mm) - 2048) // record_len
 
     # Read data
@@ -336,7 +317,6 @@ def _read_nda_130_91(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
 def _read_nda_130_90(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Read nda version 130 BTS9.0, return data and aux DataFrames."""
     record_len = 88
-    _read_footer(mm)  # Log metadata
     num_records = (len(mm) - 2048) // record_len
 
     # Read data
@@ -406,29 +386,3 @@ def _read_nda_130_90(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
     )
 
     return data_df, aux_df
-
-
-def _read_footer(mm: mmap.mmap) -> None:
-    # Identify footer
-    footer = mm.rfind(b"\x06\x00\xf0\x1d\x81\x00\x03\x00\x61\x90\x71\x90\x02\x7f\xff\x00", 1024)
-    if footer:
-        mm.seek(footer + 16)
-        buf = mm.read(499)
-
-        # Get the active mass
-        [active_mass] = struct.unpack("<d", buf[-8:])
-        logger.info("Active mass: %s mg", active_mass)
-
-        # Get the remarks
-        remarks = buf[363:491].decode("ASCII")
-
-        # Clean null characters
-        remarks = remarks.replace(chr(0), "").strip()
-        logger.info("Remarks: %s", remarks)
-
-
-def _valid_record(buf: bytes) -> bool:
-    """Identify a valid record."""
-    # Check for a non-zero Status
-    [Status] = struct.unpack("<B", buf[12:13])
-    return Status != 0
