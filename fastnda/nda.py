@@ -106,11 +106,11 @@ def read_nda_metadata(file: str | Path) -> dict[str, str | float]:
         if version_loc != -1:
             mm.seek(version_loc)
             server = mm.read(50).strip(b"\x00").decode()
-            metadata["server"] = server
+            metadata["server_version"] = server
 
             mm.seek(50, 1)
             client = mm.read(50).strip(b"\x00").decode()
-            metadata["client"] = client
+            metadata["client_version"] = client
         else:
             logger.info("BTS version not found!")
 
