@@ -2,7 +2,7 @@
 
 import polars as pl
 
-# Dictionary mapping Status integer to string
+# Dictionary mapping step_type integer to string
 state_dict = {
     1: "CC_Chg",
     2: "CC_DChg",
@@ -31,11 +31,11 @@ dtype_dict = {
     "current_mA": pl.Float32,
     "unix_time_s": pl.Float64,
     "step_time_s": pl.Float64,
-    "timestamp": pl.Datetime("us", time_zone="UTC"),
+    "total_time_s": pl.Float64,
     "cycle_count": pl.UInt32,
     "step_count": pl.UInt32,
     "step_index": pl.UInt32,
-    "status": pl.Enum(state_dict.values()),
+    "step_type": pl.Enum(state_dict.values()),
     "capacity_mAh": pl.Float32,
     "energy_mWh": pl.Float32,
 }

@@ -46,16 +46,25 @@ def read(
     if software_cycle_number:
         df = _generate_cycle_number(df, cycle_mode)
 
-    # round time to ms, Status -> categories, uts -> Timestamp
+    # round time to ms, step_type -> categories, uts -> Timestamp
     cols = [
         pl.col("step_time_s").round(3),
-        pl.col("status").replace_strict(state_dict, default=None).alias("status"),
+        pl.col("step_type").replace_strict(state_dict, default=None).alias("step_type"),
         (pl.col("charge_capacity_mAh") - pl.col("discharge_capacity_mAh")).alias("capacity_mAh"),
         (pl.col("charge_energy_mWh") - pl.col("discharge_energy_mWh")).alias("energy_mWh"),
     ]
-    if "unix_time_s" in df.columns:
-        cols += [pl.from_epoch(pl.col("unix_time_s"), time_unit="s").alias("timestamp")]
     df = df.with_columns(cols)
+
+    if "total_time_s" not in df.columns:
+        max_df = (
+            df.group_by("step_count")
+            .agg(pl.col("step_time_s").max().alias("max_step_time_s"))
+            .sort("step_count")
+            .with_columns(pl.col("max_step_time_s").shift(1).fill_null(0).cum_sum())
+        )
+        df = df.join(max_df, on="step_count", how="left").with_columns(
+            (pl.col("step_time_s") + pl.col("max_step_time_s")).alias("total_time_s")
+        )
 
     # Ensure columns have correct data types
     df = df.with_columns([pl.col(name).cast(dtype_dict[name]) for name in df.columns if name in dtype_dict])

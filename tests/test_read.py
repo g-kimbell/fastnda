@@ -40,8 +40,8 @@ class TestRead:
         test_file = Path(__file__).parent / "test_data" / "nw4-120-1-6-53.ndax"
         df1 = fastnda.read(test_file, software_cycle_number=False)
         df2 = fastnda.read(test_file, software_cycle_number=True, cycle_mode="chg")
-        status_mapping = {v: k for k, v in state_dict.items()}
-        df1 = df1.with_columns(pl.col("status").replace_strict(status_mapping, return_dtype=pl.Int32))
+        step_type_mapping = {v: k for k, v in state_dict.items()}
+        df1 = df1.with_columns(pl.col("step_type").replace_strict(step_type_mapping, return_dtype=pl.Int32))
         df1 = _generate_cycle_number(df1, "chg")
         assert_series_equal(df1["cycle_count"], df2["cycle_count"])
 
@@ -60,11 +60,10 @@ class TestRead:
             "current_mA",
             "unix_time_s",
             "step_time_s",
-            "timestamp",
             "cycle_count",
             "step_count",
             "step_index",
-            "status",
+            "step_type",
             "capacity_mAh",
             "energy_mWh",
         }
@@ -101,11 +100,11 @@ class TestRead:
             df_ref["Step Count"],
             check_names=False,
         )
-        # status is enum - faster, but not directly comparable to categorical
+        # step_type is enum - faster, but not directly comparable to categorical
         # Need to cast both to same dtype, and replace spaces in ref
         # Neware is inconsistent with 'Dchg' and 'DChg' in column names
         assert_series_equal(
-            df["status"].cast(pl.String),
+            df["step_type"].cast(pl.String),
             df_ref["Step Type"].cast(pl.String).str.replace_all(" ", "_").str.replace_all("Dchg", "DChg"),
             check_names=False,
         )
@@ -115,8 +114,8 @@ class TestRead:
         df, df_ref = parsed_data
         # If the default is wrong, check if software_cycle is correct
         if not (df["cycle_count"] == df_ref["Cycle Index"]).all():
-            status_mapping = {v: k for k, v in state_dict.items()}
-            df2 = df.with_columns(pl.col("status").replace_strict(status_mapping, return_dtype=pl.Int32))
+            step_type_mapping = {v: k for k, v in state_dict.items()}
+            df2 = df.with_columns(pl.col("step_type").replace_strict(step_type_mapping, return_dtype=pl.Int32))
             df2 = _generate_cycle_number(df2, "auto")
             assert_series_equal(
                 df2["cycle_count"],
@@ -134,16 +133,43 @@ class TestRead:
             check_names=False,
         )
 
-    def test_time(self, parsed_data: tuple) -> None:
-        """Time should agree within 1 us."""
+    def test_step_time(self, parsed_data: tuple) -> None:
+        """Step time should agree within 1 us."""
         df, df_ref = parsed_data
         max_abs_diff = (df["step_time_s"] - df_ref["Time"]).abs().max()
         if max_abs_diff > 5e-7:
             # Maybe the test data has bad precision
             if max_abs_diff < 0.01:
-                warnings.warn(f"Time only matches within {max_abs_diff:.2e} s", stacklevel=2)
+                warnings.warn(f"Step time only matches within {max_abs_diff:.2e} s", stacklevel=2)
             else:
-                msg = f"Time columns differ by up to {max_abs_diff:.2e}"
+                msg = f"Step time columns differ by up to {max_abs_diff:.2e}"
+                raise ValueError(msg)
+
+    def test_total_time(self, parsed_data: tuple) -> None:
+        """Total time should agree within 1 us."""
+        df, df_ref = parsed_data
+        diff = (df["total_time_s"] - df_ref["Total Time"]).abs()
+
+        # BTSDA exported Total time changes precision over time
+        early_diff = diff.filter(df_ref["Total Time"] < 1800).max()
+        mid_diff = diff.filter((df_ref["Total Time"] > 1800) & (df_ref["Total Time"] < 1e6)).max()
+        late_diff = diff.filter(df_ref["Total Time"] > 1e6).max()
+
+        if late_diff is not None and late_diff > 1:
+            msg = f"Total time columns differ by up to {late_diff:.2e}"
+            raise ValueError(msg)
+        if mid_diff is not None and mid_diff > 0.1:
+            msg = f"Total time columns differ by up to {mid_diff:.2e}"
+            raise ValueError(msg)
+        if early_diff is None:
+            msg = "Could not get total time difference"
+            raise ValueError(msg)
+        if early_diff > 5e-7:
+            # Warn for up to 10 ms, fail for over 10 ms
+            if early_diff < 0.01:
+                warnings.warn(f"Total time only matches within {early_diff:.2e} s", stacklevel=2)
+            else:
+                msg = f"Total time columns differ by up to {early_diff:.2e}"
                 raise ValueError(msg)
 
     def test_datetime(self, parsed_data: tuple) -> None:
@@ -160,13 +186,6 @@ class TestRead:
             abs_tol=5e-7,
         )
 
-        # Datetime should agree with uts
-        assert_series_equal(
-            df["timestamp"].cast(pl.Float64) * 1e-6,
-            df["unix_time_s"],
-            check_names=False,
-            abs_tol=5e-7,
-        )
         # Cannot cycle cells before Neware was founded in 1998
         assert df["unix_time_s"].min() > 883609200
 
@@ -256,5 +275,8 @@ class TestRead:
             else:
                 # raise an error
                 closest = min(results, key=results.get)
-                msg = f"Could not find any column matching values of {test_col}, closest reference was {closest} with an average difference of {results[closest]}"
+                msg = (
+                    f"Could not find any column matching values of {test_col}, "
+                    f"closest reference was {closest} with an average difference of {results[closest]}"
+                )
                 raise ValueError(msg)

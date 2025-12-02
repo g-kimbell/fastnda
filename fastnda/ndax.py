@@ -99,7 +99,7 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
         df = df.join(dfs["data_runInfo.ndc"], how="left", on="index")
         df = _data_interpolation(df)
 
-        # 'step' contains cycle count, step index, status for each step
+        # 'step' contains cycle count, step index, step_type for each step
         if "data_step.ndc" in dfs:
             df = df.join(dfs["data_step.ndc"], how="left", on="step_count")
 
@@ -234,7 +234,7 @@ def _read_ndc_2_filetype_1(buf: bytes) -> pl.DataFrame:
             ("index", np.uint32),  # 8-11
             ("cycle_count", np.uint32),  # 12-15
             ("step_index", np.uint8),  # 16
-            ("status", np.uint8),  # 17
+            ("step_type", np.uint8),  # 17
             ("_pad2", "V5"),  # 18-22
             ("step_time_s", np.uint64),  # 23-30
             ("voltage_V", np.int32),  # 31-34
@@ -320,7 +320,7 @@ def _read_ndc_5_filetype_1(buf: bytes) -> pl.DataFrame:
             ("index", np.uint32),
             ("cycle_count", np.uint32),
             ("step_index", np.uint8),
-            ("status", np.uint8),
+            ("step_type", np.uint8),
             ("_pad2", "V5"),
             ("step_time_s", np.uint64),
             ("voltage_V", np.int32),
@@ -465,7 +465,7 @@ def _read_ndc_11_filetype_7(buf: bytes) -> pl.DataFrame:
             ("cycle_count", "<i4"),
             ("step_index", "<i4"),
             ("_pad1", "V16"),
-            ("status", "<i1"),
+            ("step_type", "<i1"),
             ("_pad2", "V12"),
         ]
     )
@@ -543,7 +543,7 @@ def _read_ndc_14_filetype_7(buf: bytes) -> pl.DataFrame:
             ("cycle_count", "<i4"),
             ("step_index", "<i4"),
             ("_pad1", "V16"),
-            ("status", "<i1"),
+            ("step_type", "<i1"),
             ("_pad2", "V12"),
         ]
     )
@@ -634,7 +634,7 @@ def _read_ndc_16_filetype_7(buf: bytes) -> pl.DataFrame:
             ("cycle_count", "<i4"),
             ("step_index", "<i4"),
             ("_pad1", "V16"),
-            ("status", "<i1"),
+            ("step_type", "<i1"),
             ("_pad2", "V8"),
             ("index", "<i4"),
             ("_pad3", "V63"),
@@ -693,7 +693,7 @@ def _read_ndc_17_filetype_7(buf: bytes) -> pl.DataFrame:
             ("cycle_count", "<i4"),
             ("step_index", "<i4"),
             ("_pad1", "V16"),
-            ("status", "<i1"),
+            ("step_type", "<i1"),
             ("_pad2", "V8"),
             ("step_count", "<i4"),
             ("_pad3", "V63"),
