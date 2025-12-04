@@ -95,7 +95,7 @@ def main(
 def convert(
     in_file: Path,
     out_file: Annotated[Path | None, typer.Argument()] = None,
-    filetype: OutputFileType = "parquet",
+    filetype: OutputFileType = "csv",
     *,
     pandas: bool = PandasOption,
 ) -> None:
@@ -123,7 +123,7 @@ def batch_convert(
     ctx: typer.Context,
     in_folder: Path,
     out_folder: Annotated[Path | None, typer.Argument()] = None,
-    filetype: OutputFileType = "parquet",
+    filetype: OutputFileType = "csv",
     *,
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Search for .nda/.ndax files in subfolders"),
     pandas: bool = PandasOption,
