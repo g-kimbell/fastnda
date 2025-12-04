@@ -32,7 +32,7 @@ jobs:
       - name: Install
         run: |
           uv pip install ruff pytest pytest-cov
-          uv pip install -e .[pandas]
+          uv pip install -e .[extras]
       - name: Lint with ruff
         run: |
           ruff check --select=F,E9,B

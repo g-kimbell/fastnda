@@ -35,11 +35,21 @@ def require_pandas() -> None:
     """Check if pandas is installed."""
     try:
         import pandas as pd  # noqa: F401, PLC0415
+        import pyarrow as pa  # noqa: F401, PLC0415
     except ImportError as e:
         msg = (
-            "'pandas' optional dependency is not installed.\n"
-            "Install with `pip install pandas` or `pip install fastnda[pandas]`"
+            "'pandas' and 'pyarrow' optional dependencies are not installed.\n"
+            "Install extras with `pip install fastnda[extras]`"
         )
+        raise RuntimeError(msg) from e
+
+
+def require_tables() -> None:
+    """Check if pytables is installed for hdf5."""
+    try:
+        import tables  # noqa: F401, PLC0415
+    except ImportError as e:
+        msg = "'tables' optional dependency is not installed.\nInstall extras with `pip install fastnda[extras]`"
         raise RuntimeError(msg) from e
 
 
@@ -97,7 +107,10 @@ def convert(
         pandas: Whether to save in pandas-safe format
 
     """
-    if pandas or filetype in {"h5", "hdf5"}:
+    if filetype in {"h5", "hdf5"}:
+        require_pandas()
+        require_tables()
+    elif pandas:
         require_pandas()
     if out_file is None:
         out_file = in_file.with_suffix("." + filetype)
@@ -115,7 +128,10 @@ def batch_convert(
     pandas: bool = PandasOption,
 ) -> None:
     """Convert a .nda or .ndax file to another type."""
-    if pandas or filetype in {"h5", "hdf5"}:
+    if filetype in {"h5", "hdf5"}:
+        require_pandas()
+        require_tables()
+    elif pandas:
         require_pandas()
 
     if not in_folder.exists():

@@ -11,7 +11,6 @@ dependencies = [
     "defusedxml>=0.7.1",
     "numpy>=2.2.6",
     "polars>=1.33.1",
-
     "tqdm>=4.67.1",
     "typer>=0.20.0",
     "xmltodict>=1.0.2",
@@ -22,12 +21,14 @@ dev = [
     "bumpver>=2025.1131",
     "pre-commit>=4.2.0",
     "pandas>=2.3.1",
+    "pyarrow>=22.0.0",
     "pytest>=8.4.1",
     "ruff>=0.12.8",
     "tables>=3.10.1",
 ]
-pandas = [
+extras = [
     "pandas>=2.3.1",
+    "pyarrow>=22.0.0",
     "tables>=3.10.1",
 ]
 
