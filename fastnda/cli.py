@@ -1,5 +1,6 @@
 """CLI to use fastnda conversion."""
 
+import json
 import logging
 from pathlib import Path
 from typing import Annotated, Literal
@@ -182,3 +183,22 @@ def _convert_with_type(in_file: Path, out_file: Path, filetype: OutputFileType, 
                 df.write_ipc(out_file)
         case "h5" | "hdf5":
             df.to_pandas().to_hdf(out_file, key="data", format="table")
+
+
+@app.command()
+def print_metadata(in_file: Path, indent: int | None = 4) -> None:
+    """Print file metadata to terminal."""
+    typer.echo(json.dumps(fastnda.read_metadata(in_file), indent=indent))
+
+
+@app.command()
+def convert_metadata(
+    in_file: Path,
+    out_file: Annotated[Path | None, typer.Argument()] = None,
+    indent: int | None = 4,
+) -> None:
+    """Convert .nda / .ndax metadata to json."""
+    if out_file is None:
+        out_file = in_file.with_suffix(".json")
+    with out_file.open("w") as f:
+        json.dump(fastnda.read_metadata(in_file), f, indent=indent)

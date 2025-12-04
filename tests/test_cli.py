@@ -1,5 +1,6 @@
 """Tests for fastnda CLI with optional dependencies."""
 
+import json
 import logging
 import shutil
 from pathlib import Path
@@ -297,3 +298,32 @@ class TestCliWithOptionalDeps:
 
         self.runner.invoke(app, ["-vvvvv", "-qqqqq", "convert", str(self.test_file), str(output)])
         assert logging.getLogger().level == logging.WARNING
+
+    def test_print_metadata(self) -> None:
+        """Test that printing metadata to terminal works."""
+        result = self.runner.invoke(app, ["print-metadata", str(self.test_file)])
+        metadata = json.loads(result.stdout)
+        ref_metadata = fastnda.read_metadata(self.test_file)
+        assert metadata == ref_metadata
+
+    def test_convert_metadata(self, tmp_path: Path) -> None:
+        """Test that converting metadata to json works."""
+        output = tmp_path / self.test_file.with_suffix(".json").name
+        self.runner.invoke(app, ["convert-metadata", str(self.test_file), str(output)])
+        assert output.exists()
+        with output.open("r") as f:
+            metadata = json.load(f)
+        ref_metadata = fastnda.read_metadata(self.test_file)
+        assert metadata == ref_metadata
+
+    def test_convert_metadata_auto_name(self, tmp_path: Path) -> None:
+        """Test that converting metadata without explicit output file works."""
+        copied_file = tmp_path / self.test_file.name
+        shutil.copy(self.test_file, copied_file)
+        output = copied_file.with_suffix(".json")
+        self.runner.invoke(app, ["convert-metadata", str(copied_file)])
+        assert output.exists()
+        with output.open("r") as f:
+            metadata = json.load(f)
+        ref_metadata = fastnda.read_metadata(self.test_file)
+        assert metadata == ref_metadata
