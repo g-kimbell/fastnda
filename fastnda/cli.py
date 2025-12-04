@@ -3,6 +3,7 @@
 import logging
 from pathlib import Path
 from typing import Annotated, Literal
+from zipfile import BadZipFile
 
 import typer
 from tqdm import tqdm
@@ -143,7 +144,7 @@ def batch_convert(
         out_file.parent.mkdir(exist_ok=True)
         try:
             _convert_with_type(in_file, out_file, filetype, pandas)
-        except ValueError:
+        except (ValueError, BadZipFile, KeyError, AttributeError):
             LOGGER.exception("Failed to convert %s.", in_file)
 
 
