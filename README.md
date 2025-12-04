@@ -12,8 +12,6 @@ FastNDA is an experimental fork. It is thoroughly tested, but the public API and
 
 If you are interested in parsing your data as fast as possible and are willing to help stress test this package, use FastNDA. If you need stability, stick with NewareNDA.
 
-This package does not currently have a CLI, if you need this, use NewareNDA.
-
 ## Installation
 
 The package requires Python >3.10. Install from PyPI:
@@ -21,7 +19,12 @@ The package requires Python >3.10. Install from PyPI:
 pip install fastnda
 ```
 
-## Usage
+If you want to write hdf5 or pandas-readable files, install extra dependencies
+```
+pip install fastnda[extras]
+```
+
+## Using with Python
 
 Import and use `read` for both .nda and .ndax
 
@@ -46,6 +49,31 @@ You will need pandas and pyarrow installed for this.
 > 
 > This is an issue with pyarrow/pandas and is out of my control. Here, `brotli` compression mitigates most of the space cost of storing the these columns in a pandas-friendly way.
 
+You can also get file metadata with:
+```python
+metadata = fastnda.read_metadata("my/neware/file.ndax")
+```
+This returns a dictionary, it is comprehensive for .ndax files, but more limited in most .nda files.
+
+## Using with command-line interface
+
+The command-line interface can:
+
+- Convert single .nda or .ndax files
+- Batch convert folders containing .nda or .ndax files (optionally recursively)
+- Convert to different file formats (csv, parquet, hdf5, arrow)
+- Print or save .nda or .ndax metadata as JSON
+
+To see all functions, use the help:
+```bash
+fastnda --help
+```
+
+You can also use help within a function:
+```bash
+fastnda convert --help
+```
+
 ## Differences between BTSDA and fastnda
 
 This package generally adheres very closely to the outputs from BTSDA, but there are some subtle differences aside from column names:
@@ -68,4 +96,6 @@ If you have problems reading data, please raise an issue on this GitHub page.
 
 We are always in need of test data sets, as there are many different .nda and .ndax file types, and we can only generate some with the equipment we have.
 
-Ideally, test data is small. We need the .nda/.ndax and a .csv exported from BTSDA - see the instructions in the [`btsda.py`](fastnda/btsda.py) file.
+Ideally, test data is small. We need the .nda/.ndax file and may ask you for a .csv exported from BTSDA if we cannot open the file. We will only put test data in the public tests on GitHub if you agree.
+
+Code contributions are very welcome, please clone the repo, use `pip install -e .[dev]` for dev dependencies.
