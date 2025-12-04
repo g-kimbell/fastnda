@@ -13,7 +13,7 @@ LOGGER = logging.getLogger(__name__)
 
 app = typer.Typer(add_completion=False)
 
-OutputFileType = Literal["csv", "parquet", "arrow", "hdf5", "feather"]
+OutputFileType = Literal["csv", "parquet", "arrow", "feather", "h5", "hdf5"]
 
 VerbosityOption = Annotated[
     int, typer.Option("--verbose", "-v", count=True, help="Increase verbosity. Use -vv for maximum detail.")
@@ -96,7 +96,7 @@ def convert(
         pandas: Whether to save in pandas-safe format
 
     """
-    if pandas or filetype == "hdf5":
+    if pandas or filetype in {"h5", "hdf5"}:
         require_pandas()
     if out_file is None:
         out_file = in_file.with_suffix("." + filetype)
@@ -114,7 +114,7 @@ def batch_convert(
     pandas: bool = PandasOption,
 ) -> None:
     """Convert a .nda or .ndax file to another type."""
-    if pandas or filetype == "hdf5":
+    if pandas or filetype in {"h5", "hdf5"}:
         require_pandas()
 
     if not in_folder.exists():
@@ -163,12 +163,5 @@ def _convert_with_type(in_file: Path, out_file: Path, filetype: OutputFileType, 
                 df.to_pandas().to_feather(out_file)
             else:
                 df.write_ipc(out_file)
-        case "hdf5":
+        case "h5" | "hdf5":
             df.to_pandas().to_hdf(out_file, key="data", format="table")
-        case _:
-            msg = f"Cannot write to file type {filetype}"
-            raise ValueError(msg)
-
-
-if __name__ == "__main__":
-    app()
