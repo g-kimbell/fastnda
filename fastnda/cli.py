@@ -109,9 +109,9 @@ def convert(
 
     """
     if filetype in {"h5", "hdf5"}:
-        require_pandas()
         require_tables()
-    elif pandas:
+        require_pandas()
+    elif pandas and filetype in {"parquet", "arrow", "feather"}:
         require_pandas()
     if out_file is None:
         out_file = in_file.with_suffix("." + filetype)
@@ -132,7 +132,7 @@ def batch_convert(
     if filetype in {"h5", "hdf5"}:
         require_pandas()
         require_tables()
-    elif pandas:
+    elif pandas and filetype in {"parquet", "arrow", "feather"}:
         require_pandas()
 
     if not in_folder.exists():

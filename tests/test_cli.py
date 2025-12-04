@@ -130,7 +130,6 @@ class TestCliWithOptionalDeps:
 
     def test_auto_output(self, tmp_path: Path) -> None:
         """Converting polars-style parquet."""
-        # copy file to tmp path
         copied_file = tmp_path / self.test_file.name
         shutil.copy(self.test_file, copied_file)
         output = tmp_path / self.test_file.with_suffix(".parquet").name
@@ -161,7 +160,6 @@ class TestCliWithOptionalDeps:
 
     def test_batch_convert(self, tmp_path: Path) -> None:
         """Converting polars-style parquet."""
-        # copy file to tmp path
         copied_file_1 = tmp_path / (self.test_file.stem + "_1.ndax")
         copied_file_2 = tmp_path / (self.test_file.stem + "_2.ndax")
         shutil.copy(self.test_file, copied_file_1)
@@ -209,7 +207,6 @@ class TestCliWithOptionalDeps:
 
     def test_hdf5_batch_convert(self, tmp_path: Path) -> None:
         """Batch convert hdf5 files."""
-        # copy file to tmp path
         copied_file_1 = tmp_path / (self.test_file.stem + "_1.ndax")
         copied_file_2 = tmp_path / (self.test_file.stem + "_2.ndax")
         shutil.copy(self.test_file, copied_file_1)
@@ -255,11 +252,10 @@ class TestCliWithOptionalDeps:
         assert result.exit_code == 1
         assert "does not exist" in str(result.exception)
 
-    def test_batch_convert_bad_files(self, tmp_path: Path, caplog: pytest.FixtureRequest) -> None:
+    def test_batch_convert_bad_files(self, tmp_path: Path, caplog: pytest.FixtureRequest) -> None:  # noqa: ARG002
         """Test that batch convert works even if there is a bad file."""
         copied_file_1 = tmp_path / (self.test_file.stem + "_1.nda")
         copied_file_2 = tmp_path / (self.test_file.stem + "_2.ndax")
-        # just make some file
         with copied_file_1.open("w") as f:
             f.write("this is not a real ndax file")
         shutil.copy(self.test_file, copied_file_2)

@@ -77,6 +77,16 @@ class TestCliNoExtras:
         assert "pip install fastnda[extras]" in str(result.exception)
 
     @pytest.mark.usefixtures("_no_extras")
+    def test_batch_convert_pandas_parquet(self, tmp_path: Path) -> None:
+        """Batch converting pandas-safe parquet without extras raises error."""
+        result = self.runner.invoke(
+            app,
+            ["batch-convert", str(tmp_path), "--filetype=parquet", "--pandas"],
+        )
+        assert result.exit_code == 1
+        assert "pip install fastnda[extras]" in str(result.exception)
+
+    @pytest.mark.usefixtures("_no_extras")
     def test_convert_parquet(self, tmp_path: Path) -> None:
         """Converting polars-style parquet without extras works."""
         output = tmp_path / self.test_file.with_suffix(".parquet").name

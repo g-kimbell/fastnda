@@ -4,6 +4,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 
+import pytest
+
 from fastnda import read_metadata
 
 
@@ -32,3 +34,11 @@ class TestMetaData:
             assert "TestInfo" in metadata
         else:
             assert "nda_version" in metadata
+
+    def test_read_bad_file(self, tmp_path: Path) -> None:
+        """Test reading invalid file metadata."""
+        wrong_file = tmp_path / "wrong_file.txt"
+        with wrong_file.open("w") as f:
+            f.write("not a neware file")
+        with pytest.raises(ValueError):
+            read_metadata(wrong_file)
