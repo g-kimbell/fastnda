@@ -129,7 +129,7 @@ class TestCliWithOptionalDeps:
         assert_frame_equal(df, self.ref_df)
 
     def test_auto_output(self, tmp_path: Path) -> None:
-        """Converting polars-style parquet."""
+        """Converting polars-style parquet without explicit output file."""
         copied_file = tmp_path / self.test_file.name
         shutil.copy(self.test_file, copied_file)
         output = tmp_path / self.test_file.with_suffix(".parquet").name
@@ -147,19 +147,20 @@ class TestCliWithOptionalDeps:
         assert_frame_equal(df, self.ref_df)
 
     def test_empty_batch_convert(self, tmp_path: Path) -> None:
-        """Converting polars-style parquet."""
+        """Batch converting with an empty folder raises error."""
         result = self.runner.invoke(
             app,
             [
                 "batch-convert",
                 str(tmp_path),
+                "--filetype=parquet",
             ],
         )
         assert result.exit_code == 1
         assert "No .nda or .ndax files found." in str(result.exception)
 
     def test_batch_convert(self, tmp_path: Path) -> None:
-        """Converting polars-style parquet."""
+        """Basic batch converting parquet files."""
         copied_file_1 = tmp_path / (self.test_file.stem + "_1.ndax")
         copied_file_2 = tmp_path / (self.test_file.stem + "_2.ndax")
         shutil.copy(self.test_file, copied_file_1)
@@ -181,7 +182,7 @@ class TestCliWithOptionalDeps:
         assert_frame_equal(df, self.ref_df)
 
     def test_recursive_batch_convert(self, tmp_path: Path) -> None:
-        """Converting polars-style parquet."""
+        """Recursive batch converting requires -r or --recursive."""
         (tmp_path / "subfolder").mkdir()
         copied_file_1 = tmp_path / "subfolder" / (self.test_file.stem + "_1.ndax")
         shutil.copy(self.test_file, copied_file_1)
@@ -231,7 +232,7 @@ class TestCliWithOptionalDeps:
         )
 
     def test_batch_convert_bad_inputs(self, tmp_path: Path) -> None:
-        """Test batch convert with bad inputs."""
+        """Batch converting with bad inputs."""
         result = self.runner.invoke(
             app,
             [
@@ -253,7 +254,7 @@ class TestCliWithOptionalDeps:
         assert "does not exist" in str(result.exception)
 
     def test_batch_convert_bad_files(self, tmp_path: Path, caplog: pytest.FixtureRequest) -> None:  # noqa: ARG002
-        """Test that batch convert works even if there is a bad file."""
+        """Batch convert continues even if there is a bad file."""
         copied_file_1 = tmp_path / (self.test_file.stem + "_1.nda")
         copied_file_2 = tmp_path / (self.test_file.stem + "_2.ndax")
         with copied_file_1.open("w") as f:
@@ -274,7 +275,7 @@ class TestCliWithOptionalDeps:
         assert output_2.exists()
 
     def test_verbosity(self, tmp_path: Path, caplog: pytest.FixtureRequest) -> None:  # noqa: ARG002
-        """Test batch convert with bad inputs."""
+        """User can change to different verbosity levels."""
         output = tmp_path / self.test_file.with_suffix(".parquet").name
 
         self.runner.invoke(app, ["-vv", "convert", str(self.test_file), str(output)])
