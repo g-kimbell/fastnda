@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2025-12-01
+### Changed
+- More detailed metadata reading
+
+## [0.2.4] - 2025-11-19
+### Changed
+- Filter data using bitmask
+
+## [0.2.3] - 2025-11-11
+### Added
+- NDA 130 BTS9.1 returns both step time and total time
+
+### Fixed
+- NDC17 step count
+- Consistent duplicate index handling
+- Typos
+
+## [0.2.2] - 2025-10-03
+### Added
+- More testing
+
+### Fixed
+- Improved compatibility for NDC2 and NDC5
+- Consistent step type naming
+
+## [0.2.1] - 2025-09-25
+### Added
+- Tests for auxiliary data
+- NDC16 support
+- NDC17 with aux support
+
+### Changed
+- Empty aux columns are dropped
+
+## [0.2.0] - 2025-08-13
+### Changed
+- Vectorized file parsing
+- Switched from pandas to polars
+- ruff formatting
+
+### Fixed
+- Time interpolation
+- Duplicate indices
+
+## [0.1.0] - 2025-08-08
+### Changed
+- Project forked to https://github.com/g-kimbell/fastnda
+- Switched to semantic versioning
 
 ## [v2025.06.02]
 ### Fixed
