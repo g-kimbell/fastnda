@@ -25,9 +25,9 @@ def parsed_data(file_pair: tuple[Path, Path]) -> tuple[pl.DataFrame, pl.DataFram
             # unzip file to a temp location and read
             zip_test.extractall(tmp_dir)
             test_file = Path(tmp_dir) / test_file.stem
-            df = fastnda.read(test_file, software_cycle_number=False)
+            df = fastnda.read(test_file, cycle_mode="raw")
     else:
-        df = fastnda.read(test_file, software_cycle_number=False)
+        df = fastnda.read(test_file, cycle_mode="raw")
     df_ref = pl.read_parquet(ref_file)
     return df, df_ref
 
@@ -38,8 +38,8 @@ class TestRead:
     def test_generate_cycle_number(self) -> None:
         """Test generating cycle numbers on just one file."""
         test_file = Path(__file__).parent / "test_data" / "nw4-120-1-6-53.ndax"
-        df1 = fastnda.read(test_file, software_cycle_number=False)
-        df2 = fastnda.read(test_file, software_cycle_number=True, cycle_mode="chg")
+        df1 = fastnda.read(test_file, cycle_mode="raw")
+        df2 = fastnda.read(test_file, cycle_mode="chg")
         step_type_mapping = {v: k for k, v in state_dict.items()}
         df1 = df1.with_columns(pl.col("step_type").replace_strict(step_type_mapping, return_dtype=pl.Int32))
         df1 = _generate_cycle_number(df1, "chg")
@@ -110,9 +110,9 @@ class TestRead:
         )
 
     def test_cycle(self, parsed_data: tuple) -> None:
-        """Cycle should be exact when not using software_cycle_number."""
+        """Cycle should be exact when using raw cycle_mode."""
         df, df_ref = parsed_data
-        # If the default is wrong, check if software_cycle is correct
+        # If the default is wrong, check if cycle_mode auto is correct
         if not (df["cycle_count"] == df_ref["Cycle Index"]).all():
             step_type_mapping = {v: k for k, v in state_dict.items()}
             df2 = df.with_columns(pl.col("step_type").replace_strict(step_type_mapping, return_dtype=pl.Int32))
@@ -122,7 +122,7 @@ class TestRead:
                 df_ref["Cycle Index"],
                 check_names=False,
             )
-            warnings.warn("Cycles only match when using software_cycle_number", stacklevel=2)
+            warnings.warn("Cycles do not match with 'raw' cycle_mode, only with 'auto'", stacklevel=2)
 
     def test_index(self, parsed_data: tuple) -> None:
         """Index should be UInt32 monotonically increasing by 1."""

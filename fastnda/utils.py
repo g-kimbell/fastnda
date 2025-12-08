@@ -20,12 +20,13 @@ def _generate_cycle_number(
 ) -> pl.DataFrame:
     """Generate a cycle number to match Neware.
 
-    cycle_mode = chg: (Default) Sets new cycles with a Charge step following a Discharge.
-        dchg: Sets new cycles with a Discharge step following a Charge.
-        auto: Identifies the first non-rest state as the incremental state.
+    cycle_mode: Selects how the cycle is incremented.
+            'chg': (Default) Cycle incremented by a charge step following a discharge.
+            'dchg': Cycle incremented by a discharge step following a charge.
+            'auto': Identifies the first non-rest state as the incremental state.
     """
     # Auto: find the first non rest cycle
-    if cycle_mode.lower() == "auto":
+    if cycle_mode == "auto":
         cycle_mode = _id_first_state(df)
 
     # Set increment key and non-increment/off key

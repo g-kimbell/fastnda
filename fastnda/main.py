@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import polars as pl
 
@@ -14,19 +14,16 @@ from fastnda.utils import _generate_cycle_number, state_dict
 logger = logging.getLogger(__name__)
 
 
-def read(
-    file: str | Path, software_cycle_number: bool = True, cycle_mode: Literal["chg", "dchg", "auto"] = "chg"
-) -> pl.DataFrame:
+def read(file: str | Path, cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "chg") -> pl.DataFrame:
     """Read electrochemical data from an Neware nda or ndax binary file.
 
     Args:
         file: Path of .nda or .ndax file to read
-        software_cycle_number: Regenerate the cycle number to match
-            Neware's 'Charge First' circular statistic setting
         cycle_mode: Selects how the cycle is incremented.
-            'chg': (Default) Sets new cycles with a Charge step following a Discharge.
-            'dchg': Sets new cycles with a Discharge step following a Charge.
+            'chg': (Default) Cycle incremented by a charge step following a discharge.
+            'dchg': Cycle incremented by a discharge step following a charge.
             'auto': Identifies the first non-rest state as the incremental state.
+            'raw': Leaves cycles as it is found in the Neware file.
 
     Returns:
         DataFrame containing all records in the file
@@ -43,7 +40,8 @@ def read(
         raise ValueError(msg)
 
     # Generate cycle number if requested
-    if software_cycle_number:
+    if cycle_mode in {"chg", "dchg", "auto"}:
+        cycle_mode = cast("Literal['chg', 'dchg', 'auto']", cycle_mode)
         df = _generate_cycle_number(df, cycle_mode)
 
     # round time to ms, step_type -> categories, uts -> Timestamp
@@ -78,7 +76,15 @@ def read(
 
 
 def read_metadata(file: str | Path) -> dict[str, str | float]:
-    """Read metadata from a Neware .nda or .ndax file."""
+    """Read metadata from a Neware .nda or .ndax file.
+
+    Args:
+        file: Path of .nda or .ndax file
+
+    Returns:
+        Dictionary containing metadata
+
+    """
     file = Path(file)
     if file.suffix == ".nda":
         return read_nda_metadata(file)
