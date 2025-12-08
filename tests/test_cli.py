@@ -186,6 +186,36 @@ class TestCliWithOptionalDeps:
             check_dtypes=False,
         )
 
+    def test_default_format(self, tmp_path: Path) -> None:
+        """Format is csv if no output or --format given."""
+        copied_file = tmp_path / (self.test_file.stem + ".ndax")
+        shutil.copy(self.test_file, copied_file)
+        output = copied_file.with_suffix(".csv")
+        result = self.runner.invoke(app, ["convert", str(copied_file)])
+        assert result.exit_code == 0
+        assert output.exists()
+        df = pl.read_csv(output)
+        assert_frame_equal(
+            df,
+            self.ref_df.with_columns(pl.col("step_type").cast(pl.Utf8)),
+            check_dtypes=False,
+        )
+
+    def test_unknown_format(self, tmp_path: Path) -> None:
+        """Format is csv if it cannot be inferred from path."""
+        copied_file = tmp_path / (self.test_file.stem + ".ndax")
+        shutil.copy(self.test_file, copied_file)
+        output = copied_file.with_suffix(".bloop")
+        result = self.runner.invoke(app, ["convert", str(copied_file), str(output)])
+        assert result.exit_code == 0
+        assert output.exists()
+        df = pl.read_csv(output)
+        assert_frame_equal(
+            df,
+            self.ref_df.with_columns(pl.col("step_type").cast(pl.Utf8)),
+            check_dtypes=False,
+        )
+
     def test_empty_batch_convert(self, tmp_path: Path) -> None:
         """Batch converting with an empty folder raises error."""
         result = self.runner.invoke(
