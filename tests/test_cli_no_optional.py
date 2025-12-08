@@ -47,7 +47,7 @@ class TestCliNoExtras:
                 "convert",
                 str(self.test_file),
                 str(output),
-                "--filetype=hdf5",
+                "--format=hdf5",
             ],
         )
         assert result.exit_code == 1
@@ -60,7 +60,7 @@ class TestCliNoExtras:
         output = tmp_path / self.test_file.with_suffix(".parquet").name
         result = self.runner.invoke(
             app,
-            ["convert", str(self.test_file), str(output), "--filetype=parquet", "--pandas"],
+            ["convert", str(self.test_file), str(output), "--format=parquet", "--pandas"],
         )
         assert result.exit_code == 1
         assert "pip install fastnda[extras]" in str(result.exception)
@@ -71,7 +71,7 @@ class TestCliNoExtras:
         output = tmp_path / self.test_file.with_suffix(".arrow").name
         result = self.runner.invoke(
             app,
-            ["convert", str(self.test_file), str(output), "--filetype=arrow", "--pandas"],
+            ["convert", str(self.test_file), str(output), "--format=arrow", "--pandas"],
         )
         assert result.exit_code == 1
         assert "pip install fastnda[extras]" in str(result.exception)
@@ -81,7 +81,7 @@ class TestCliNoExtras:
         """Batch converting pandas-safe parquet without extras raises error."""
         result = self.runner.invoke(
             app,
-            ["batch-convert", str(tmp_path), "--filetype=parquet", "--pandas"],
+            ["batch-convert", str(tmp_path), "--format=parquet", "--pandas"],
         )
         assert result.exit_code == 1
         assert "pip install fastnda[extras]" in str(result.exception)
@@ -96,7 +96,7 @@ class TestCliNoExtras:
                 "convert",
                 str(self.test_file),
                 str(output),
-                "--filetype=parquet",
+                "--format=parquet",
             ],
         )
         assert result.exit_code == 0
@@ -121,7 +121,7 @@ class TestCliNoExtras:
                 "convert",
                 str(self.test_file),
                 str(output),
-                "--filetype=arrow",
+                "--format=arrow",
             ],
         )
         assert result.exit_code == 0
