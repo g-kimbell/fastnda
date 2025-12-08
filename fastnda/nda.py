@@ -19,16 +19,9 @@ def read_nda(file: str | Path) -> pl.DataFrame:
 
     Args:
         file: Path of .nda file to read
-        software_cycle_number: Generate the cycle number field
-            to match old versions of BTSDA
-        cycle_mode: Selects how the cycle is incremented.
-            'chg': (Default) Sets new cycles with a Charge step following a Discharge.
-            'dchg': Sets new cycles with a Discharge step following a Charge.
-            'auto': Identifies the first non-rest state as the incremental state.
 
     Returns:
         DataFrame containing all records in the file
-        Metadata dictionary with file version and other info
 
     """
     file = Path(file)
@@ -75,7 +68,15 @@ def read_nda(file: str | Path) -> pl.DataFrame:
 
 
 def read_nda_metadata(file: str | Path) -> dict[str, str | int | float]:
-    """Read metadata from a Neware .nda file."""
+    """Read metadata from a Neware .nda file.
+
+    Args:
+        file: Path of .nda file to read
+
+    Returns:
+        Dictionary containing metadata
+
+    """
     file = Path(file)
     with file.open("rb") as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)

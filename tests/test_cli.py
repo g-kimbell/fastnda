@@ -32,7 +32,7 @@ class TestCliWithOptionalDeps:
                 "convert",
                 str(self.test_file),
                 str(output),
-                "--filetype=h5",
+                "--format=h5",
             ],
         )
         assert result.exit_code == 0
@@ -48,7 +48,7 @@ class TestCliWithOptionalDeps:
         output = tmp_path / self.test_file.with_suffix(".parquet").name
         result = self.runner.invoke(
             app,
-            ["convert", str(self.test_file), str(output), "--filetype=parquet", "--pandas"],
+            ["convert", str(self.test_file), str(output), "--format=parquet", "--pandas"],
         )
         assert result.exit_code == 0
         assert output.exists()
@@ -63,7 +63,7 @@ class TestCliWithOptionalDeps:
         output = tmp_path / self.test_file.with_suffix(".arrow").name
         result = self.runner.invoke(
             app,
-            ["convert", str(self.test_file), str(output), "--filetype=arrow", "--pandas"],
+            ["convert", str(self.test_file), str(output), "--format=arrow", "--pandas"],
         )
         assert result.exit_code == 0
         assert output.exists()
@@ -82,7 +82,7 @@ class TestCliWithOptionalDeps:
                 "convert",
                 str(self.test_file),
                 str(output),
-                "--filetype=csv",
+                "--format=csv",
             ],
         )
         assert result.exit_code == 0
@@ -103,7 +103,7 @@ class TestCliWithOptionalDeps:
                 "convert",
                 str(self.test_file),
                 str(output),
-                "--filetype=parquet",
+                "--format=parquet",
             ],
         )
         assert result.exit_code == 0
@@ -120,7 +120,7 @@ class TestCliWithOptionalDeps:
                 "convert",
                 str(self.test_file),
                 str(output),
-                "--filetype=arrow",
+                "--format=arrow",
             ],
         )
         assert result.exit_code == 0
@@ -138,13 +138,83 @@ class TestCliWithOptionalDeps:
             [
                 "convert",
                 str(copied_file),
-                "--filetype=parquet",
+                "--format=parquet",
             ],
         )
         assert result.exit_code == 0
         assert output.exists()
         df = pl.read_parquet(output)
         assert_frame_equal(df, self.ref_df)
+
+    def test_auto_format(self, tmp_path: Path) -> None:
+        """File format should come from out_file if --format is not used."""
+        output = tmp_path / self.test_file.with_suffix(".parquet").name
+        result = self.runner.invoke(
+            app,
+            [
+                "convert",
+                str(self.test_file),
+                str(output),
+            ],
+        )
+        assert result.exit_code == 0
+        assert output.exists()
+        df = pl.read_parquet(output)
+        assert_frame_equal(df, self.ref_df)
+
+    def test_format_override(self, tmp_path: Path) -> None:
+        """--format option overrides inferring from Path."""
+        output = tmp_path / self.test_file.with_suffix(".parquet").name
+        result = self.runner.invoke(
+            app,
+            [
+                "convert",
+                str(self.test_file),
+                str(output),
+                "--format=csv",
+            ],
+        )
+        assert result.exit_code == 0
+        # Has parquet extension, but is csv, not parquet format
+        assert output.exists()
+        with pytest.raises(pl.exceptions.ComputeError):
+            df = pl.read_parquet(output)
+        df = pl.read_csv(output)
+        assert_frame_equal(
+            df,
+            self.ref_df.with_columns(pl.col("step_type").cast(pl.Utf8)),
+            check_dtypes=False,
+        )
+
+    def test_default_format(self, tmp_path: Path) -> None:
+        """Format is csv if no output or --format given."""
+        copied_file = tmp_path / (self.test_file.stem + ".ndax")
+        shutil.copy(self.test_file, copied_file)
+        output = copied_file.with_suffix(".csv")
+        result = self.runner.invoke(app, ["convert", str(copied_file)])
+        assert result.exit_code == 0
+        assert output.exists()
+        df = pl.read_csv(output)
+        assert_frame_equal(
+            df,
+            self.ref_df.with_columns(pl.col("step_type").cast(pl.Utf8)),
+            check_dtypes=False,
+        )
+
+    def test_unknown_format(self, tmp_path: Path) -> None:
+        """Format is csv if it cannot be inferred from path."""
+        copied_file = tmp_path / (self.test_file.stem + ".ndax")
+        shutil.copy(self.test_file, copied_file)
+        output = copied_file.with_suffix(".bloop")
+        result = self.runner.invoke(app, ["convert", str(copied_file), str(output)])
+        assert result.exit_code == 0
+        assert output.exists()
+        df = pl.read_csv(output)
+        assert_frame_equal(
+            df,
+            self.ref_df.with_columns(pl.col("step_type").cast(pl.Utf8)),
+            check_dtypes=False,
+        )
 
     def test_empty_batch_convert(self, tmp_path: Path) -> None:
         """Batch converting with an empty folder raises error."""
@@ -153,7 +223,7 @@ class TestCliWithOptionalDeps:
             [
                 "batch-convert",
                 str(tmp_path),
-                "--filetype=parquet",
+                "--format=parquet",
             ],
         )
         assert result.exit_code == 1
@@ -172,7 +242,7 @@ class TestCliWithOptionalDeps:
             [
                 "batch-convert",
                 str(tmp_path),
-                "--filetype=parquet",
+                "--format=parquet",
             ],
         )
         assert result.exit_code == 0
@@ -192,7 +262,7 @@ class TestCliWithOptionalDeps:
             [
                 "batch-convert",
                 str(tmp_path),
-                "--filetype=parquet",
+                "--format=parquet",
             ],
         )
         assert result.exit_code == 1
@@ -201,7 +271,7 @@ class TestCliWithOptionalDeps:
 
         result = self.runner.invoke(
             app,
-            ["batch-convert", str(tmp_path), "--filetype=parquet", "--recursive"],
+            ["batch-convert", str(tmp_path), "--format=parquet", "--recursive"],
         )
         assert result.exit_code == 0
         assert output_1.exists()
@@ -219,7 +289,7 @@ class TestCliWithOptionalDeps:
             [
                 "batch-convert",
                 str(tmp_path),
-                "--filetype=h5",
+                "--format=h5",
             ],
         )
         assert result.exit_code == 0
@@ -267,7 +337,7 @@ class TestCliWithOptionalDeps:
             [
                 "batch-convert",
                 str(tmp_path),
-                "--filetype=parquet",
+                "--format=parquet",
             ],
         )
         assert result.exit_code == 0

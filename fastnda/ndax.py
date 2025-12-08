@@ -26,15 +26,9 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
 
     Args:
         file: Path to .ndax file to read
-        software_cycle_number: Regenerate the cycle number field
-        cycle_mode: Selects how the cycle is incremented.
-            'chg': (Default) Sets new cycles with a Charge step following a Discharge.
-            'dchg': Sets new cycles with a Discharge step following a Charge.
-            'auto': Identifies the first non-rest state as the incremental state.
 
     Returns:
         DataFrame containing all records in the file
-        Metadata dictionary with file version and other info
 
     """
     zf = zipfile.PyZipFile(str(file))
