@@ -1,3 +1,8 @@
+[![PyPI version](https://img.shields.io/pypi/v/fastnda.svg)](https://pypi.org/project/fastnda/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/fastnda.svg)](https://pypi.org/project/fastnda/)
+[![Build](https://github.com/g-kimbell/fastnda/actions/workflows/test.yml/badge.svg)](https://github.com/g-kimbell/fastnda/actions/workflows/test.yml)
+[![License](https://img.shields.io/github/license/g-kimbell/fastnda.svg)](https://github.com/g-kimbell/fastnda/blob/main/LICENSE)
+
 # FastNDA
 
 Python tool to parse Neware .nda and .ndax binary files.
@@ -39,21 +44,19 @@ df = df.to_pandas()
 ```
 You will need pandas and pyarrow installed for this.
 
+You can also get file metadata as a dictionary with:
+```python
+metadata = fastnda.read_metadata("my/neware/file.ndax")
+```
+
 > [!NOTE]
-> If you want to write a to a file that uses pyarrow (e.g. parquet or feather) that can be read by both pandas and polars, you must convert to pandas first, e.g.:
+> If you want to write files that use arrow (e.g. parquet/arrow/feather) that can be read by both pandas and polars, you must convert to pandas first, e.g.:
 > ```python
 > df.to_pandas().to_parquet(filename, compression="brotli")
 > ```
 >
-> If you write directly from polars, polars categorical/enum columns are written in a way that is very fast and space efficient, but cannot be read by pandas.
-> 
-> This is an issue with pyarrow/pandas and is out of my control. Here, `brotli` compression mitigates most of the space cost of storing the these columns in a pandas-friendly way.
-
-You can also get file metadata with:
-```python
-metadata = fastnda.read_metadata("my/neware/file.ndax")
-```
-This returns a dictionary, it is comprehensive for .ndax files, but more limited in most .nda files.
+> If you write directly from polars, polars categorical/enum columns are written in a way that cannot be read by pandas.
+> This is an issue with pyarrow/pandas and is out of my control.
 
 ## Using with command-line interface
 
