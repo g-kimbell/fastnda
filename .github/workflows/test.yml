@@ -45,7 +45,12 @@ jobs:
   
       - name: Test with pytest
         run: |
-          pytest --cov=fastnda --cov-report=term
+          pytest --cov=fastnda  --cov-report=term --cov-report=xml
+
+      - name: Upload results to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # Publish to PyPI if tagged and tests pass
   publish:
