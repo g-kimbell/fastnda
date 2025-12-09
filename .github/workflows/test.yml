@@ -20,7 +20,7 @@ jobs:
         python-version:
           - "3.10"
           - "3.11"
-          - "3.12"
+          - "3.12.12"
           - "3.13"
 
     steps:
@@ -34,7 +34,7 @@ jobs:
       - name: Check zlib version
         run: |
           uv run python -c "import zlib; print('zlib version:', zlib.ZLIB_VERSION, 'runtime:', zlib.ZLIB_RUNTIME_VERSION)"
-      
+    
       - name: Install
         run: |
           uv pip install ruff pytest pytest-cov
