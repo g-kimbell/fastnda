@@ -31,56 +31,55 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
         DataFrame containing all records in the file
 
     """
-    zf = zipfile.PyZipFile(str(file))
-
-    # Find all auxiliary channel files
-    # Auxiliary files files need to be matched to entries in TestInfo.xml
-    # Sort by the numbers in the filename, assume same order in TestInfo.xml
-    aux_data = []
-    for f in zf.namelist():
-        m = re.search(r"data_AUX_(\d+)_(\d+)_(\d+)\.ndc", f)
-        if m:
-            aux_data.append((f, list(map(int, m.groups()))))
-        else:
-            m = re.search(r".*_(\d+)\.ndc", f)
+    with zipfile.ZipFile(str(file)) as zf:
+        # Find all auxiliary channel files
+        # Auxiliary files files need to be matched to entries in TestInfo.xml
+        # Sort by the numbers in the filename, assume same order in TestInfo.xml
+        aux_data = []
+        for f in zf.namelist():
+            m = re.search(r"data_AUX_(\d+)_(\d+)_(\d+)\.ndc", f)
             if m:
-                aux_data.append((f, [int(m.group(1)), 0, 0]))
+                aux_data.append((f, list(map(int, m.groups()))))
+            else:
+                m = re.search(r".*_(\d+)\.ndc", f)
+                if m:
+                    aux_data.append((f, [int(m.group(1)), 0, 0]))
 
-    # Sort by the three integers
-    aux_data.sort(key=lambda x: x[1])
-    aux_filenames = [f for f, _ in aux_data]
+        # Sort by the three integers
+        aux_data.sort(key=lambda x: x[1])
+        aux_filenames = [f for f, _ in aux_data]
 
-    # Find all auxiliary channel dicts in TestInfo.xml
-    aux_dicts: list[dict] = []
-    if aux_filenames:
-        try:
-            step = zf.read("TestInfo.xml").decode("gb2312")
-            test_info = ElementTree.fromstring(step).find("config/TestInfo")
-            if test_info is not None:
-                aux_dicts.extend(
-                    {k: int(v) if v.isdigit() else v for k, v in child.attrib.items()}
-                    for child in test_info
-                    if "aux" in child.tag.lower()
-                )
-        except Exception:
-            logger.exception("Aux files found, but could not read TestInfo.xml!")
+        # Find all auxiliary channel dicts in TestInfo.xml
+        aux_dicts: list[dict] = []
+        if aux_filenames:
+            try:
+                step = zf.read("TestInfo.xml").decode("gb2312")
+                test_info = ElementTree.fromstring(step).find("config/TestInfo")
+                if test_info is not None:
+                    aux_dicts.extend(
+                        {k: int(v) if v.isdigit() else v for k, v in child.attrib.items()}
+                        for child in test_info
+                        if "aux" in child.tag.lower()
+                    )
+            except Exception:
+                logger.exception("Aux files found, but could not read TestInfo.xml!")
 
-    # ASSUME channel files are in the same order as TestInfo.xml, map filenames to dicts
-    if len(aux_dicts) == len(aux_filenames):
-        aux_ch_dict = dict(zip(aux_filenames, aux_dicts, strict=True))
-    else:
-        aux_ch_dict = {}
-        logger.critical("Found a different number of aux channels in files and TestInfo.xml!")
+        # ASSUME channel files are in the same order as TestInfo.xml, map filenames to dicts
+        if len(aux_dicts) == len(aux_filenames):
+            aux_ch_dict = dict(zip(aux_filenames, aux_dicts, strict=True))
+        else:
+            aux_ch_dict = {}
+            logger.critical("Found a different number of aux channels in files and TestInfo.xml!")
 
-    # Extract and parse all of the .ndc files into dataframes in parallel
-    files_to_read = ["data.ndc", "data_runInfo.ndc", "data_step.ndc", *aux_filenames]
-    dfs = {}
-    with ThreadPoolExecutor() as executor:
-        futures = {executor.submit(extract_and_bytes_to_df, zf, fname): fname for fname in files_to_read}
-        for future in as_completed(futures):
-            fname, df = future.result()
-            if df is not None:
-                dfs[fname] = df
+        # Extract and parse all of the .ndc files into dataframes in parallel
+        files_to_read = ["data.ndc", "data_runInfo.ndc", "data_step.ndc", *aux_filenames]
+        dfs = {}
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(extract_and_bytes_to_df, zf, fname): fname for fname in files_to_read}
+            for future in as_completed(futures):
+                fname, df = future.result()
+                if df is not None:
+                    dfs[fname] = df
 
     if "data.ndc" not in dfs:
         msg = "File type not yet supported!"
@@ -120,7 +119,7 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
 def read_ndax_metadata(file: str | Path) -> dict[str, str | float]:
     """Read metadata from VersionInfo.xml and Step.xml in a Neware .ndax file."""
     metadata = {}
-    with zipfile.PyZipFile(str(file)) as zf:
+    with zipfile.ZipFile(str(file)) as zf:
         xml_files = [f for f in zf.namelist() if f.endswith(".xml")]
         for xml_file in xml_files:
             name = xml_file.split("/")[-1].split(".")[0]
