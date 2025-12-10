@@ -1,7 +1,8 @@
 [![PyPI version](https://img.shields.io/pypi/v/fastnda.svg)](https://pypi.org/project/fastnda/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/fastnda.svg)](https://pypi.org/project/fastnda/)
 [![Build](https://github.com/g-kimbell/fastnda/actions/workflows/test.yml/badge.svg)](https://github.com/g-kimbell/fastnda/actions/workflows/test.yml)
-[![License](https://img.shields.io/github/license/g-kimbell/fastnda.svg)](https://github.com/g-kimbell/fastnda/blob/main/LICENSE)
+[![codecov](https://codecov.io/gh/g-kimbell/fastnda/graph/badge.svg?token=BB3FA6IKER)](https://codecov.io/gh/g-kimbell/fastnda)
+[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/g-kimbell/fastnda/blob/main/LICENSE)
 
 # FastNDA
 
@@ -53,6 +54,11 @@ metadata = fastnda.read_metadata("my/neware/file.ndax")
 > If you want to write files that use arrow (e.g. parquet/arrow/feather) that can be read by both pandas and polars, you must convert to pandas first, e.g.:
 > ```python
 > df.to_pandas().to_parquet(filename, compression="brotli")
+> ```
+> 
+> In the CLI, pass the `--pandas` or `-p` flag:
+> ```bash
+> fastnda convert "my/neware/file.ndax" --format=parquet --pandas
 > ```
 >
 > If you write directly from polars, polars categorical/enum columns are written in a way that cannot be read by pandas.
