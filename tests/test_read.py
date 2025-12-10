@@ -136,6 +136,8 @@ class TestRead:
     def test_step_time(self, parsed_data: tuple) -> None:
         """Step time should agree within 1 us."""
         df, df_ref = parsed_data
+        if len(df) == 0 and len(df_ref) == 0:
+            return
         max_abs_diff = (df["step_time_s"] - df_ref["Time"]).abs().max()
         if max_abs_diff > 5e-7:
             # Maybe the test data has bad precision
@@ -148,6 +150,8 @@ class TestRead:
     def test_total_time(self, parsed_data: tuple) -> None:
         """Total time should agree within 1 us."""
         df, df_ref = parsed_data
+        if len(df) == 0 and len(df_ref) == 0:
+            return
         diff = (df["total_time_s"] - df_ref["Total Time"]).abs()
 
         # BTSDA exported Total time changes precision over time
@@ -175,6 +179,8 @@ class TestRead:
     def test_datetime(self, parsed_data: tuple) -> None:
         """Date should agree within 1 us."""
         df, df_ref = parsed_data
+        if len(df) == 0 and len(df_ref) == 0:
+            return
         # Cannot compare date directly - Neware datetime is not timezone aware.
         duts = df["unix_time_s"] - df["unix_time_s"][0]
         datetime_ref = df_ref["Date"].cast(pl.Float64) / 1000
