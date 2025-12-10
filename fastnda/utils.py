@@ -25,6 +25,10 @@ def _generate_cycle_number(
             'dchg': Cycle incremented by a discharge step following a charge.
             'auto': Identifies the first non-rest state as the incremental state.
     """
+    # Check if any df
+    if len(df) == 0:
+        return df
+
     # Auto: find the first non rest cycle
     if cycle_mode == "auto":
         cycle_mode = _id_first_state(df)
