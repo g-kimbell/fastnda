@@ -54,6 +54,11 @@ metadata = fastnda.read_metadata("my/neware/file.ndax")
 > ```python
 > df.to_pandas().to_parquet(filename, compression="brotli")
 > ```
+> 
+> In the CLI, pass the `--pandas` or `-p` flag:
+> ```bash
+> fastnda convert "my/neware/file.ndax" --format=parquet --pandas
+> ```
 >
 > If you write directly from polars, polars categorical/enum columns are written in a way that cannot be read by pandas.
 > This is an issue with pyarrow/pandas and is out of my control.
