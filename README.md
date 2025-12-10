@@ -1,7 +1,8 @@
 [![PyPI version](https://img.shields.io/pypi/v/fastnda.svg)](https://pypi.org/project/fastnda/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/fastnda.svg)](https://pypi.org/project/fastnda/)
 [![Build](https://github.com/g-kimbell/fastnda/actions/workflows/test.yml/badge.svg)](https://github.com/g-kimbell/fastnda/actions/workflows/test.yml)
-[![License](https://img.shields.io/github/license/g-kimbell/fastnda.svg)](https://github.com/g-kimbell/fastnda/blob/main/LICENSE)
+[![codecov](https://codecov.io/gh/g-kimbell/fastnda/graph/badge.svg?token=BB3FA6IKER)](https://codecov.io/gh/g-kimbell/fastnda)
+[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/g-kimbell/fastnda/blob/main/LICENSE)
 
 # FastNDA
 
