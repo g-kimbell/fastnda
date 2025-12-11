@@ -90,3 +90,11 @@ class TestUtils:
         )
         with pytest.raises(KeyError):
             _generate_cycle_number(df, cycle_mode="invalid")
+
+    def test_generate_cycle_number_empty(self) -> None:
+        """Test generating cycle numbers."""
+        df = pl.DataFrame({"step_type": [], "cycle_count": []})
+        assert_series_equal(
+            _generate_cycle_number(df, cycle_mode="auto")["cycle_count"],
+            df["cycle_count"],
+        )

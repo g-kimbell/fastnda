@@ -81,10 +81,7 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
                 if df is not None:
                     dfs[fname] = df
 
-    if "data.ndc" not in dfs:
-        msg = "File type not yet supported!"
-        raise NotImplementedError(msg)
-
+    # Main data (voltage, current) is always called data.ndc
     df = dfs["data.ndc"]
 
     # 'runInfo' contains times, capacities, energies, and needs to be forward-filled/interpolated
@@ -192,9 +189,8 @@ def _data_interpolation(df: pl.DataFrame) -> pl.DataFrame:
     # Sanity checks
     if (df["unix_time_s"].diff() < 0).any():
         logger.warning(
-            "IMPORTANT: This ndax has negative jumps in the 'timestamp' column! "
-            "This can sometimes happen in the ndax file itself. "
-            "Use the 'Time' column for analysis.",
+            "IMPORTANT: This ndax has negative jumps in the 'unix_time_s' column! "
+            "Use the 'total_time_s' column for analysis.",
         )
 
     return df
@@ -216,7 +212,7 @@ def read_ndc(buf: bytes) -> pl.DataFrame:
     if reader is None:
         msg = f"ndc version {ndc_version} filetype {ndc_filetype} is not yet supported!"
         raise NotImplementedError(msg) from None
-    logger.info("Reading ndc version %d filetype %d", ndc_version, ndc_filetype)
+    logger.debug("Reading ndc version %d filetype %d", ndc_version, ndc_filetype)
     return reader(buf)
 
 
