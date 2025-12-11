@@ -81,10 +81,7 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
                 if df is not None:
                     dfs[fname] = df
 
-    if "data.ndc" not in dfs:
-        msg = "File type not yet supported!"
-        raise NotImplementedError(msg)
-
+    # Main data (voltage, current) is always called data.ndc
     df = dfs["data.ndc"]
 
     # 'runInfo' contains times, capacities, energies, and needs to be forward-filled/interpolated
