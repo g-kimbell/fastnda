@@ -189,9 +189,8 @@ def _data_interpolation(df: pl.DataFrame) -> pl.DataFrame:
     # Sanity checks
     if (df["unix_time_s"].diff() < 0).any():
         logger.warning(
-            "IMPORTANT: This ndax has negative jumps in the 'timestamp' column! "
-            "This can sometimes happen in the ndax file itself. "
-            "Use the 'Time' column for analysis.",
+            "IMPORTANT: This ndax has negative jumps in the 'unix_time_s' column! "
+            "Use the 'total_time_s' column for analysis.",
         )
 
     return df
