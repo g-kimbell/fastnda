@@ -16,10 +16,11 @@ from fastnda.main import _generate_cycle_number
 
 
 @pytest.fixture
-def parsed_data(file_pair: tuple[Path, Path]) -> tuple[pl.DataFrame, pl.DataFrame]:
+def parsed_data(file_pair: tuple[Path, Path | None]) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Read in the data for each file pair ONCE."""
     test_file, ref_file = file_pair
-
+    if ref_file is None:
+        pytest.skip("No reference Parquet file for this input.")
     if test_file.suffix == ".zip":  # Is nda or ndax zipped
         with TemporaryDirectory() as tmp_dir, ZipFile(test_file, "r") as zip_test:
             # unzip file to a temp location and read
