@@ -388,11 +388,9 @@ def _read_nda_130_90(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
             ("step_time_s", np.uint64),  # 28-35
             ("voltage_V", np.float32),  # 36-39
             ("current_mA", np.float32),  # 40-43
-            ("_pad4", "V8"),  # 44-51
-            ("charge_capacity_mAh", np.float32),  # 52-55
-            ("charge_energy_mWh", np.float32),  # 56-59
-            ("discharge_capacity_mAh", np.float32),  # 60-63
-            ("discharge_energy_mWh", np.float32),  # 64-67
+            ("_pad4", "V16"),  # 44-51
+            ("capacity_mAh", np.float32),  # 60-63
+            ("energy_mWh", np.float32),  # 64-67
             ("unix_time_s", np.uint64),  # 68-75
             ("_pad5", "V12"),  # 76-87
         ]
@@ -406,8 +404,7 @@ def _read_nda_130_90(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
         [
             pl.col("unix_time_s").cast(pl.Float64) / 1e6,  # us -> s
             (pl.col("step_time_s") / 1e6).cast(pl.Float32),  # us -> s
-            pl.col(["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"])
-            / 3600,
+            pl.col(["capacity_mAh", "energy_mWh"]) / 3600,
             _count_changes(pl.col("step_index")).alias("step_count"),
         ]
     )
