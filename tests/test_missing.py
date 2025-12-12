@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from fastnda.nda import _read_nda_29, read_nda, read_nda_metadata
+from fastnda.nda import _read_nda_8, _read_nda_29, read_nda, read_nda_metadata
 from fastnda.ndax import _read_ndc_16_filetype_5, read_ndc
 
 
@@ -37,3 +37,5 @@ class TestMissing:
             mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
         with pytest.raises(EOFError):
             _read_nda_29(mm)
+        with pytest.raises(EOFError):
+            _read_nda_8(mm)

@@ -130,12 +130,11 @@ def _read_nda_8(mm: mmap.mmap) -> pl.DataFrame:
     # Identify the beginning of the data section - first byte 255 and index = 1
     record_len = 59
     identifier = b"\xff\x01\x00\x00\x00"
-    header = mm.find(identifier) + record_len
+    header = mm.find(identifier)
     if header == -1:
         msg = "Could not find start of data section."
         raise EOFError(msg)
-
-    # Read data records
+    header = header + record_len
     num_records = (len(mm) - header) // record_len
     end = len(mm) - (len(mm) - header) % record_len
     arr = np.frombuffer(mm[header:end], dtype=np.int8).reshape((num_records, record_len))
