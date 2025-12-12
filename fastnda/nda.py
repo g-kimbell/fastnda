@@ -35,7 +35,11 @@ def read_nda(file: str | Path) -> pl.DataFrame:
         nda_version = int(mm[14])
 
         # Reading depends on the NDA version
-        if nda_version == 29:
+        if nda_version == 8:
+            logger.info("Reading NDA version 8")
+            df = _read_nda_8(mm)
+            aux_df = pl.DataFrame()
+        elif nda_version == 29:
             logger.info("Reading NDA version 29")
             df, aux_df = _read_nda_29(mm)
         elif nda_version == 130:
@@ -119,6 +123,53 @@ def read_nda_metadata(file: str | Path) -> dict[str, str | int | float]:
             metadata["remarks"] = buf[363:491].decode("ASCII").replace(chr(0), "").strip()
 
     return metadata
+
+
+def _read_nda_8(mm: mmap.mmap) -> pl.DataFrame:
+    """Read nda version 8, return data and aux DataFrames."""
+    # Identify the beginning of the data section - first byte 255 and index = 1
+    record_len = 59
+    identifier = b"\xff\x01\x00\x00\x00"
+    header = mm.find(identifier) + record_len
+    if header == -1:
+        msg = "Could not find start of data section."
+        raise EOFError(msg)
+
+    # Read data records
+    num_records = (len(mm) - header) // record_len
+    end = len(mm) - (len(mm) - header) % record_len
+    arr = np.frombuffer(mm[header:end], dtype=np.int8).reshape((num_records, record_len))
+
+    data_dtype = np.dtype(
+        [
+            ("_pad1", "V1"),
+            ("index", np.uint32),
+            ("cycle_count", np.uint32),
+            ("step_index", np.uint8),
+            ("step_type", np.uint8),
+            ("step_time_s", np.uint32),
+            ("voltage_V", np.int32),  # /10000
+            ("current_mA", np.int32),  # /10000
+            ("_pad2", "V8"),  # Maybe milliseconds or aux channels, not enough ref data to know
+            ("capacity_mAh", np.int64),  # /3600000
+            ("energy_mWh", np.int64),  # /3600000
+            ("unix_time_s", np.uint64),
+            ("_pad3", "V4"),  # Possibly a checksum
+        ]
+    )
+    assert data_dtype.names is not None  # noqa: S101
+    data_dtype_no_pad = data_dtype[[name for name in data_dtype.names if not name.startswith("_")]]
+    data_arr = arr.view(data_dtype_no_pad).flatten()
+    return pl.DataFrame(data_arr).with_columns(
+        [
+            pl.col("step_time_s").cast(pl.Float32),
+            pl.col("voltage_V").cast(pl.Float32) / 10000,
+            pl.col("current_mA").cast(pl.Float32) / 10000,
+            (pl.col("capacity_mAh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
+            (pl.col("energy_mWh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
+            _count_changes(pl.col("step_index")).alias("step_count"),
+        ]
+    )
 
 
 def _read_nda_29(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
