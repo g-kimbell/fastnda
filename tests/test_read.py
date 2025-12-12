@@ -251,6 +251,14 @@ class TestRead:
                 msg = "Energy columns are different."
                 raise ValueError(msg)
 
+    def test_capacity_energy_sign(self, parsed_data: tuple) -> None:
+        """Capacity/energy should have same sign as current."""
+        df, _df_ref = parsed_data
+        # Take the mean, as current can reverse sign within one step
+        df_avg = df.group_by(pl.col("step_count")).mean()
+        assert all(df_avg["capacity_mAh"].sign() == df_avg["current_mA"].sign())
+        assert all(df_avg["energy_mWh"].sign() == df_avg["current_mA"].sign())
+
     def test_aux_cols(self, parsed_data: tuple) -> None:
         """Dataframes should have matching aux channels."""
         df, df_ref = parsed_data

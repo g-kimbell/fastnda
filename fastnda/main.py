@@ -48,9 +48,12 @@ def read(file: str | Path, cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "
     cols = [
         pl.col("step_time_s").round(3),
         pl.col("step_type").replace_strict(state_dict, default=None).alias("step_type"),
-        (pl.col("charge_capacity_mAh") - pl.col("discharge_capacity_mAh")).alias("capacity_mAh"),
-        (pl.col("charge_energy_mWh") - pl.col("discharge_energy_mWh")).alias("energy_mWh"),
     ]
+    if "capacity_mAh" not in df.columns:
+        cols += [
+            (pl.col("charge_capacity_mAh") - pl.col("discharge_capacity_mAh")).alias("capacity_mAh"),
+            (pl.col("charge_energy_mWh") - pl.col("discharge_energy_mWh")).alias("energy_mWh"),
+        ]
     df = df.with_columns(cols)
 
     if "total_time_s" not in df.columns:
