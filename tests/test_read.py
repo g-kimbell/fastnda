@@ -106,7 +106,13 @@ class TestRead:
         # Neware is inconsistent with 'Dchg' and 'DChg' in column names
         assert_series_equal(
             df["step_type"].cast(pl.String),
-            df_ref["Step Type"].cast(pl.String).str.replace_all(" ", "_").str.replace_all("Dchg", "DChg"),
+            (
+                df_ref["Step Type"]
+                .cast(pl.String)
+                .str.replace_all(" ", "_")
+                .str.replace_all("Dchg", "DChg")
+                .str.replace_all("Pulse_Step", "Pulse")
+            ),
             check_names=False,
         )
 
