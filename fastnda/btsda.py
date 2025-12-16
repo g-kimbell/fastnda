@@ -90,3 +90,94 @@ def btsda_csv_to_parquet(csv_file: str | Path, out_file: str | Path | None = Non
     # Trying to keep repo small with lots of test data
     df.write_parquet(out_file, compression="brotli", compression_level=11)
     return df
+
+
+def btsda9_xlsx_to_parquet(xlsx_file: str | Path, out_file: str | Path | None = None) -> pl.DataFrame:
+    """Convert BTS 9.0 files to parquet."""
+    xlsx_file = Path(xlsx_file)
+    out_file = xlsx_file.with_suffix(".parquet") if out_file is None else Path(out_file)
+    df = pl.read_excel(xlsx_file, infer_schema_length=1000, sheet_name="record")
+    if "FlowTimer" in df.columns:
+        df = df.rename({"FlowTimer": "Time"})
+    df = df.with_columns(
+        [
+            pl.col("FlowTimer").map_elements(_time_str_to_float, return_dtype=pl.Float64).alias("Total Time"),
+            pl.col("RtcTimer").str.to_datetime(format="%Y-%m-%d %H:%M:%S%.f", time_unit="ms").alias("Date"),
+            (pl.col("Current(mA)") * 1000).alias("Current(uA)"),
+            (pl.col("Voltage(V)") * 1000).alias("Voltage(mV)"),
+            (pl.col("CurrStep_Capacity(mAh)") * 3600).alias("Capacity(mAs)"),
+            (pl.col("CurrStep_Energy(mWh)") * 3600).alias("Energy(mWs)"),
+            pl.col("Step ID").alias("Step Index"),  # Don't know the difference here
+            pl.col("Step ID").alias("Step Count"),
+            pl.col("Cycle ID").alias("Cycle Index"),
+            pl.col("DataSerial").alias("Index"),
+            pl.col("StepType").alias("Step Type"),
+            pl.col("AuxTemp1(Start Temperature)").alias("T1"),
+        ]
+    )
+    max_df = (
+        df.group_by("Step ID")
+        .agg(pl.col("Total Time").max().alias("Max Total Time"))
+        .sort("Step ID")
+        .with_columns(pl.col("Max Total Time").shift(1).fill_null(0))
+    )
+    df = df.join(max_df, on="Step ID", how="left").with_columns(
+        (pl.col("Total Time") - pl.col("Max Total Time")).alias("Time")
+    )
+    dtypes_here = {k: v for k, v in dtypes.items() if k in df.columns}
+    aux_cols = [c for c in df.columns if re.match(r"^[TtHV]\d+", c)]
+    df = df.select(list(dtypes_here.keys()) + aux_cols)
+    df = df.cast({**dtypes_here, **dict.fromkeys(aux_cols, pl.Float32)})
+    df.write_parquet(out_file, compression="brotli", compression_level=11)
+    return df
+
+
+def btsda91_xlsx_to_parquet(xlsx_file: str | Path, out_file: str | Path | None = None) -> pl.DataFrame:
+    """Convert BTS 9.1 files to parquet."""
+    xlsx_file = Path(xlsx_file)
+    out_file = xlsx_file.with_suffix(".parquet") if out_file is None else Path(out_file)
+    df = pl.read_excel(xlsx_file, infer_schema_length=1000, sheet_name="record")
+    df_step = pl.read_excel(xlsx_file, infer_schema_length=1000, sheet_name="step")
+    df = df.join(df_step, on="Step ID")
+    df = df.with_columns(
+        [
+            pl.col("Time(h:m:s:ms:us)").map_elements(_time_str_to_float, return_dtype=pl.Float64).alias("Time"),
+            pl.col("Realtime")
+            .str.replace_all(".", "", literal=True)
+            .str.to_datetime(format="%Y-%m-%d %H:%M:%S:%6f", time_unit="ms")
+            .alias("Date"),
+            (pl.col("Current(mA)") * 1000).alias("Current(uA)"),
+            (pl.col("Voltage(V)") * 1000).alias("Voltage(mV)"),
+            (pl.col("Cap(mAh)") * 3600).alias("Capacity(mAs)"),
+            (pl.col("Energy(mWh)") * 3600).alias("Energy(mWs)"),
+            pl.col("Step ID").alias("Step Count"),
+            pl.col("OriStepID").alias("Step Index"),
+            pl.col("CycleID").alias("Cycle Index"),
+            pl.col("Record ID").alias("Index"),
+        ]
+    )
+    max_df = (
+        df.group_by("Step Count")
+        .agg(
+            pl.col("Time").max().alias("Max Step Time"),
+            pl.col("Capacity(mAs)").last().alias("Last Capacity(mAs)"),
+            pl.col("Energy(mWs)").last().alias("Last Energy(mWs)"),
+        )
+        .sort("Step Count")
+        .with_columns(
+            pl.col("Max Step Time").shift(1).fill_null(0).cum_sum(),
+            pl.col("Last Capacity(mAs)").shift(1).fill_null(0),
+            pl.col("Last Energy(mWs)").shift(1).fill_null(0),
+        )
+    )
+    df = df.join(max_df, on="Step Count", how="left").with_columns(
+        (pl.col("Time") + pl.col("Max Step Time")).alias("Total Time"),
+        pl.col("Capacity(mAs)") - pl.col("Last Capacity(mAs)").alias("Capacity(mAs)"),
+        pl.col("Energy(mWs)") - pl.col("Last Energy(mWs)").alias("Energy(mWs)"),
+    )
+    dtypes_here = {k: v for k, v in dtypes.items() if k in df.columns}
+    aux_cols = [c for c in df.columns if re.match(r"^[TtHV]\d+", c)]
+    df = df.select(list(dtypes_here.keys()) + aux_cols)
+    df = df.cast({**dtypes_here, **dict.fromkeys(aux_cols, pl.Float32)})
+    df.write_parquet(out_file, compression="brotli", compression_level=11)
+    return df
