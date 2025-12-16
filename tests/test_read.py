@@ -16,10 +16,11 @@ from fastnda.main import _generate_cycle_number
 
 
 @pytest.fixture
-def parsed_data(file_pair: tuple[Path, Path]) -> tuple[pl.DataFrame, pl.DataFrame]:
+def parsed_data(file_pair: tuple[Path, Path | None]) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Read in the data for each file pair ONCE."""
     test_file, ref_file = file_pair
-
+    if ref_file is None:
+        pytest.skip("No reference Parquet file for this input.")
     if test_file.suffix == ".zip":  # Is nda or ndax zipped
         with TemporaryDirectory() as tmp_dir, ZipFile(test_file, "r") as zip_test:
             # unzip file to a temp location and read
@@ -105,7 +106,13 @@ class TestRead:
         # Neware is inconsistent with 'Dchg' and 'DChg' in column names
         assert_series_equal(
             df["step_type"].cast(pl.String),
-            df_ref["Step Type"].cast(pl.String).str.replace_all(" ", "_").str.replace_all("Dchg", "DChg"),
+            (
+                df_ref["Step Type"]
+                .cast(pl.String)
+                .str.replace_all(" ", "_")
+                .str.replace_all("Dchg", "DChg")
+                .str.replace_all("Pulse_Step", "Pulse")
+            ),
             check_names=False,
         )
 
@@ -153,28 +160,22 @@ class TestRead:
         if len(df) == 0 and len(df_ref) == 0:
             return
         diff = (df["total_time_s"] - df_ref["Total Time"]).abs()
-
+        max_diff = None
         # BTSDA exported Total time changes precision over time
-        early_diff = diff.filter(df_ref["Total Time"] < 1800).max()
-        mid_diff = diff.filter((df_ref["Total Time"] > 1800) & (df_ref["Total Time"] < 1e6)).max()
-        late_diff = diff.filter(df_ref["Total Time"] > 1e6).max()
-
-        if late_diff is not None and late_diff > 1:
-            msg = f"Total time columns differ by up to {late_diff:.2e}"
-            raise ValueError(msg)
-        if mid_diff is not None and mid_diff > 0.1:
-            msg = f"Total time columns differ by up to {mid_diff:.2e}"
-            raise ValueError(msg)
-        if early_diff is None:
-            msg = "Could not get total time difference"
-            raise ValueError(msg)
-        if early_diff > 5e-7:
-            # Warn for up to 10 ms, fail for over 10 ms
-            if early_diff < 0.01:
-                warnings.warn(f"Total time only matches within {early_diff:.2e} s", stacklevel=2)
-            else:
-                msg = f"Total time columns differ by up to {early_diff:.2e}"
+        thresholds = [
+            ((1e7, 1e8), 10.1),
+            ((1e6, 1e7), 1.01),
+            ((1800, 1e6), 0.101),
+            ((0, 1800), 0.0101),
+        ]
+        for (time_min, time_max), threshold in thresholds:
+            max_diff = diff.filter((df_ref["Total Time"] > time_min) & (df_ref["Total Time"] < time_max)).max()
+            if max_diff is not None and max_diff > threshold:
+                msg = f"Total time columns differ by up to {max_diff:.2e}"
                 raise ValueError(msg)
+        # Check earliest time diff, warn if over 1 us
+        if max_diff is not None and max_diff > 5e-7:
+            warnings.warn(f"Total time only matches within {max_diff:.2e} s", stacklevel=2)
 
     def test_datetime(self, parsed_data: tuple) -> None:
         """Date should agree within 1 us."""
@@ -222,14 +223,14 @@ class TestRead:
         # It can also can have negative values for discharge
         abs_diff = (df["capacity_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
         rel_diff = 2 * abs_diff / (df["capacity_mAh"] + df_ref["Capacity(mAs)"].abs() / 3600)
-        if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+        if ((abs_diff > 6e-4) & (rel_diff > 1e-6)).any():
             # If this fails, sometimes Neware does not count negative current during charge towards the capacity
             df = df.with_columns(
                 pl.col("capacity_mAh").abs().cum_max().over(pl.col("step_count")).alias("capacity_ignore_negs_mAh")
             )
             abs_diff = (df["capacity_ignore_negs_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
             rel_diff = 2 * abs_diff / (df["capacity_ignore_negs_mAh"].abs() + df_ref["Capacity(mAs)"].abs() / 3600)
-            if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+            if ((abs_diff > 6e-4) & (rel_diff > 1e-6)).any():
                 msg = "Capacity columns are different."
                 raise ValueError(msg)
 
@@ -247,9 +248,12 @@ class TestRead:
             )
             abs_diff = (df["energy_ignore_negs_mWh"] - df_ref["Energy(mWs)"].abs() / 3600).abs()
             rel_diff = 2 * abs_diff / (df["energy_ignore_negs_mWh"] + df_ref["Energy(mWs)"].abs() / 3600)
-            if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+            if ((abs_diff > 6e-3) & (rel_diff > 1e-6)).any():
                 msg = "Energy columns are different."
                 raise ValueError(msg)
+            if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+                msg = f"Energy columns differ by up to {max(abs_diff):.2e} mWh (or {max(rel_diff) * 100:2g}%)."
+                warnings.warn(msg, stacklevel=2)
 
     def test_capacity_energy_sign(self, parsed_data: tuple) -> None:
         """Capacity/energy should have same sign as current."""

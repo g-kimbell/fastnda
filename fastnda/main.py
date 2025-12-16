@@ -39,7 +39,10 @@ def read(file: str | Path, cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "
         msg = "File type not supported!"
         raise ValueError(msg)
 
-    # Generate cycle number if requested
+    # Generate cycle number if requested or missing
+    if "cycle_count" not in df.columns and cycle_mode == "raw":
+        logger.warning("Raw cycle column missing for this file type, using 'auto'.")
+        cycle_mode = "auto"
     if cycle_mode in {"chg", "dchg", "auto"}:
         cycle_mode = cast("Literal['chg', 'dchg', 'auto']", cycle_mode)
         df = _generate_cycle_number(df, cycle_mode)

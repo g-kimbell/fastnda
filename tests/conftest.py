@@ -59,6 +59,6 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         outputs = {_remove_extension(f.name): f for f in data_dir.rglob("*.parquet")}
 
         # Create list of (input_file, output_file) tuples
-        file_pairs = [(inputs[stem], outputs[stem]) for stem in inputs.keys() & outputs.keys()]
+        file_pairs = [(inputs[stem], outputs.get(stem)) for stem in inputs]
 
         metafunc.parametrize("file_pair", file_pairs, ids=[f.stem for f, _ in file_pairs])
