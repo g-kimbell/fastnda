@@ -160,28 +160,22 @@ class TestRead:
         if len(df) == 0 and len(df_ref) == 0:
             return
         diff = (df["total_time_s"] - df_ref["Total Time"]).abs()
-
+        max_diff = None
         # BTSDA exported Total time changes precision over time
-        early_diff = diff.filter(df_ref["Total Time"] < 1800).max()
-        mid_diff = diff.filter((df_ref["Total Time"] > 1800) & (df_ref["Total Time"] < 1e6)).max()
-        late_diff = diff.filter(df_ref["Total Time"] > 1e6).max()
-
-        if late_diff is not None and late_diff > 1:
-            msg = f"Total time columns differ by up to {late_diff:.2e}"
-            raise ValueError(msg)
-        if mid_diff is not None and mid_diff > 0.1:
-            msg = f"Total time columns differ by up to {mid_diff:.2e}"
-            raise ValueError(msg)
-        if early_diff is None:
-            msg = "Could not get total time difference"
-            raise ValueError(msg)
-        if early_diff > 5e-7:
-            # Warn for up to 10 ms, fail for over 10 ms
-            if early_diff < 0.01:
-                warnings.warn(f"Total time only matches within {early_diff:.2e} s", stacklevel=2)
-            else:
-                msg = f"Total time columns differ by up to {early_diff:.2e}"
+        thresholds = [
+            ((1e7, 1e8), 10.1),
+            ((1e6, 1e7), 1.01),
+            ((1800, 1e6), 0.101),
+            ((0, 1800), 0.0101),
+        ]
+        for (time_min, time_max), threshold in thresholds:
+            max_diff = diff.filter((df_ref["Total Time"] > time_min) & (df_ref["Total Time"] < time_max)).max()
+            if max_diff is not None and max_diff > threshold:
+                msg = f"Total time columns differ by up to {max_diff:.2e}"
                 raise ValueError(msg)
+        # Check earliest time diff, warn if over 1 us
+        if max_diff is not None and max_diff > 5e-7:
+            warnings.warn(f"Total time only matches within {max_diff:.2e} s", stacklevel=2)
 
     def test_datetime(self, parsed_data: tuple) -> None:
         """Date should agree within 1 us."""
