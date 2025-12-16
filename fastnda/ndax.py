@@ -95,20 +95,18 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
 
     # Merge the aux data if it exists
     for i, (f, aux_dict) in enumerate(aux_ch_dict.items()):
-        if f not in dfs:
-            continue
-        aux_df = dfs[f]
+        aux_df = dfs.get(f)
+        if aux_df is not None:
+            # Get aux ID, use -i if not present to avoid conflicts
+            aux_id = aux_dict.get("AuxID", -i)
 
-        # Get aux ID, use -i if not present to avoid conflicts
-        aux_id = aux_dict.get("AuxID", -i)
-
-        # If ? column exists, rename name by ChlType (T, t, H)
-        if "?" in aux_df.columns and aux_dict.get("ChlType") in aux_chl_type_columns:
-            col = aux_chl_type_columns[aux_dict["ChlType"]]
-            aux_df = aux_df.rename({"?": f"aux{aux_id}_{col}"})
-        else:  # Otherwise just append aux ID to column names
-            aux_df = aux_df.rename({col: f"aux{aux_id}_{col}" for col in aux_df.columns if col not in ["index"]})
-        df = df.join(aux_df, how="left", on="index")
+            # If ? column exists, rename name by ChlType (T, t, H)
+            if "?" in aux_df.columns and aux_dict.get("ChlType") in aux_chl_type_columns:
+                col = aux_chl_type_columns[aux_dict["ChlType"]]
+                aux_df = aux_df.rename({"?": f"aux{aux_id}_{col}"})
+            else:  # Otherwise just append aux ID to column names
+                aux_df = aux_df.rename({col: f"aux{aux_id}_{col}" for col in aux_df.columns if col not in ["index"]})
+            df = df.join(aux_df, how="left", on="index")
 
     return df
 
