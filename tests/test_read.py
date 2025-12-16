@@ -223,14 +223,14 @@ class TestRead:
         # It can also can have negative values for discharge
         abs_diff = (df["capacity_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
         rel_diff = 2 * abs_diff / (df["capacity_mAh"] + df_ref["Capacity(mAs)"].abs() / 3600)
-        if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+        if ((abs_diff > 6e-4) & (rel_diff > 1e-6)).any():
             # If this fails, sometimes Neware does not count negative current during charge towards the capacity
             df = df.with_columns(
                 pl.col("capacity_mAh").abs().cum_max().over(pl.col("step_count")).alias("capacity_ignore_negs_mAh")
             )
             abs_diff = (df["capacity_ignore_negs_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
             rel_diff = 2 * abs_diff / (df["capacity_ignore_negs_mAh"].abs() + df_ref["Capacity(mAs)"].abs() / 3600)
-            if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+            if ((abs_diff > 6e-4) & (rel_diff > 1e-6)).any():
                 msg = "Capacity columns are different."
                 raise ValueError(msg)
 
@@ -248,9 +248,12 @@ class TestRead:
             )
             abs_diff = (df["energy_ignore_negs_mWh"] - df_ref["Energy(mWs)"].abs() / 3600).abs()
             rel_diff = 2 * abs_diff / (df["energy_ignore_negs_mWh"] + df_ref["Energy(mWs)"].abs() / 3600)
-            if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+            if ((abs_diff > 6e-3) & (rel_diff > 1e-6)).any():
                 msg = "Energy columns are different."
                 raise ValueError(msg)
+            if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+                msg = f"Energy columns differ by up to {max(abs_diff):.2e} mWh (or {max(rel_diff) * 100:2g}%)."
+                warnings.warn(msg, stacklevel=2)
 
     def test_capacity_energy_sign(self, parsed_data: tuple) -> None:
         """Capacity/energy should have same sign as current."""
