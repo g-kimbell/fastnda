@@ -4,28 +4,32 @@
 [![codecov](https://codecov.io/gh/g-kimbell/fastnda/graph/badge.svg?token=BB3FA6IKER)](https://codecov.io/gh/g-kimbell/fastnda)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/g-kimbell/fastnda/blob/main/LICENSE)
 
-# FastNDA
 
-Python tool to parse Neware .nda and .ndax binary files.
+# _FastNDA_
 
-This project is a fork of [d-cogswell/NewareNDA](https://github.com/d-cogswell/NewareNDA), which has taken over development from [original NewareNDA project](https://github.com/Solid-Energy-Systems/NewareNDA).
+Python tool to read Neware .nda and .ndax binary files fast.
 
-This is an experimental fork refactored with a focus on speed, for those of us with enormous quantities of battery cycling data. The data parsing takes advantage of `polars` and uses vectorization where possible to give a ~10x speed improvement.
+This project is a fork of [`NewareNDA`](https://github.com/d-cogswell/NewareNDA), and builds on top of other projects [`neware_reader`](https://github.com/FTHuld/neware_reader) and [`nda-extractor`](https://github.com/thebestpatrick/nda-extractor).
 
-## Should I use this or NewareNDA?
+This fork explores larger, performance-focused changes that are difficult to land upstream incrementally. NewareNDA remains mature and actively maintained, and collaboration with the upstream project is ongoing.
 
-FastNDA is an experimental fork. It is thoroughly tested, but the public API and dataframe columns may change before 1.0.0 release. NewareNDA is more mature and stable, and is still being actively maintained.
+FastNDA uses `polars`, parallelization, and vectorized buffer reading to significantly reduce processing time.
 
-If you are interested in parsing your data as fast as possible and are willing to help stress test this package, use FastNDA. If you need stability, stick with NewareNDA.
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/59abf7f2-c5b9-4e48-b1cc-4a4a133ee168" width="500" align="center" alt="Aurora cycler manager">
+</p>
+<p align="center">
+  Time to convert a ~100 MB, 1.3-million-row .ndax file to .csv. Best of three runs.<br>1) Cold start from command-line interface, including module imports.<br>2) Processing time only, without UI navigation.
+</p>
 
 ## Installation
 
-The package requires Python >3.10. Install from PyPI:
+The package requires Python >=3.10. Install from PyPI:
 ```
 pip install fastnda
 ```
 
-If you want to write hdf5 or pandas-readable files, install extra dependencies
+If you want to write HDF5 or `pandas`-readable files, install extra dependencies
 ```
 pip install fastnda[extras]
 ```
@@ -39,7 +43,7 @@ import fastnda
 
 df = fastnda.read("my/neware/file.ndax")
 ```
-This returns a polars dataframe. If you would prefer to use pandas, you can do a zero-copy convert with:
+This returns a polars dataframe. If you would prefer to use pandas, you can do a zero-copy conversion with:
 ```python
 df = df.to_pandas()
 ```
@@ -50,21 +54,7 @@ You can also get file metadata as a dictionary with:
 metadata = fastnda.read_metadata("my/neware/file.ndax")
 ```
 
-> [!NOTE]
-> If you want to write files that use arrow (e.g. parquet/arrow/feather) that can be read by both pandas and polars, you must convert to pandas first, e.g.:
-> ```python
-> df.to_pandas().to_parquet(filename, compression="brotli")
-> ```
-> 
-> In the CLI, pass the `--pandas` or `-p` flag:
-> ```bash
-> fastnda convert "my/neware/file.ndax" --format=parquet --pandas
-> ```
->
-> If you write directly from polars, polars categorical/enum columns are written in a way that cannot be read by pandas.
-> This is an issue with pyarrow/pandas and is out of my control.
-
-## Using with command-line interface
+## Using the command-line interface
 
 The command-line interface can:
 
@@ -83,19 +73,49 @@ You can also use help within a function:
 fastnda convert --help
 ```
 
-## Differences between BTSDA and fastnda
+> [!NOTE]
+> If you want to write files that use arrow (e.g. parquet/arrow/feather) that can be read by both `pandas` and `polars`, you must convert to `pandas` first.
+> In Python:
+> ```python
+> df.to_pandas().to_parquet(filename, compression="brotli")
+> ```
+> 
+> In the CLI, pass the `--pandas` or `-p` flag:
+> ```bash
+> fastnda convert "my/neware/file.ndax" --format=parquet --pandas
+> ```
+>
+> If you write directly from `polars`, categorical columns are written in a way that cannot be read by pandas.
+> This is an issue with pyarrow/pandas, not FastNDA.
+
+## Differences between BTSDA and FastNDA
 
 This package generally adheres very closely to the outputs from BTSDA, but there are some subtle differences aside from column names:
 - Capacity and energy
   - In Neware, capacity and energy can have separate columns for charge and discharge, and both can be positive
-  - In fastnda, capacity and energy are one column, charge is positive and discharge is negative
-  - In fastnda, a negative current during charge will count negatively to the capacity, in Neware it is ignored
+  - In FastNDA, capacity and energy are one column, charge is positive and discharge is negative
+  - In FastNDA, a negative current during charge will count negatively to the capacity, in Neware it is ignored
 - Cycle count
-  - In some Neware files, cycles are only counted when the step index goes backwards, this is an inaccurate definition
-  - By default in fastnda, a cycle is when a charge and discharge step have been completed (or discharge then charge)
-  - The original behaviour can be accessed from fastnda, but is not generally recommended
-- Status codes
-  - Neware sometimes uses "DChg" and sometimes "Dchg" for discharge, fastnda always uses "DChg"
+  - In some Neware files, cycles are only counted when the step index goes backwards
+  - By default in FastNDA, a cycle is when a charge and discharge step have been completed (or discharge then charge)
+  - The original behaviour can be accessed from FastNDA by setting `cycle_mode = "raw"`
+- Step types
+  - Neware sometimes uses "DChg" and sometimes "Dchg" for discharge, FastNDA always uses "DChg"
+  - Neware "Pulse Step" is here "Pulse"
+
+Besides speed, there are other benefits of using FastNDA or NewareNDA over BTSDA:
+  - Batch or automated file conversion is straightforward with Python or CLI
+  - BTSDA drops precision depending on the units you select, e.g. exporting to V is less precise than exporting to mV
+  - BTSDA drops time precision over time, e.g. after 1e6 seconds, all millisecond precision can be dropped
+  - BTSDA can also drop capacity/energy precision over time
+  - Different BTSDA versions need to be installed to open different .nda or .ndax files
+
+## Differences between FastNDA and NewareNDA
+
+- `fastnda` returns `polars` dataframes, `NewareNDA` returns `pandas` dataframes
+- Column names have changed
+- There is only one capacity and one energy column
+- Time is explicitly split into step time and total time
 
 ## Contributions
 
