@@ -45,7 +45,11 @@ CycleModeOption = Annotated[
 ]
 PandasOption = Annotated[
     bool,
-    typer.Option("--pandas", "-p", help="Save with pandas-safe column types (only for parquet, arrow, feather)."),
+    typer.Option(
+        "--pandas",
+        "-p",
+        help="Save with pandas-safe column types (only for parquet, arrow, feather, without --raw-categories).",
+    ),
 ]
 RecursiveOption = Annotated[
     bool,
@@ -53,6 +57,12 @@ RecursiveOption = Annotated[
         "--recursive",
         "-r",
         help="Search for .nda/.ndax files in subfolders. Output files will have same folder structure.",
+    ),
+]
+RawCategoriesOption = Annotated[
+    bool,
+    typer.Option(
+        "--raw-categories", help="Store step_type categorical column as integer codes, e.g. 1 instead of 'CC_Chg'."
     ),
 ]
 
@@ -124,6 +134,7 @@ def convert(
     cycle_mode: CycleModeOption = "chg",
     *,
     pandas: PandasOption = False,
+    raw_categories: RawCategoriesOption = False,
 ) -> None:
     """Convert a .nda or .ndax file to another type.
 
@@ -147,7 +158,7 @@ def convert(
         require_pandas()
     if out_file is None:
         out_file = in_file.with_suffix("." + file_format)
-    _convert_with_type(in_file, out_file, file_format, cycle_mode, pandas)
+    _convert_with_type(in_file, out_file, file_format, cycle_mode, pandas, raw_categories)
 
 
 @app.command()
@@ -160,6 +171,7 @@ def batch_convert(
     *,
     recursive: RecursiveOption = False,
     pandas: PandasOption = False,
+    raw_categories: RawCategoriesOption = False,
 ) -> None:
     """Convert a folder of .nda or .ndax files to another type.
 
@@ -207,7 +219,7 @@ def batch_convert(
         out_file = out_folder / in_file.relative_to(in_folder).with_suffix("." + file_format)
         out_file.parent.mkdir(exist_ok=True)
         try:
-            _convert_with_type(in_file, out_file, file_format, cycle_mode, pandas)
+            _convert_with_type(in_file, out_file, file_format, cycle_mode, pandas, raw_categories)
         except (ValueError, BadZipFile, KeyError, AttributeError):
             LOGGER.exception("Failed to convert %s.", in_file)
 
@@ -229,8 +241,9 @@ def _convert_with_type(
     file_format: FormatOption,
     cycle_mode: CycleModeOption,
     pandas: bool,
+    raw_categories: bool,
 ) -> None:
-    df = fastnda.read(in_file, cycle_mode=cycle_mode)
+    df = fastnda.read(in_file, cycle_mode=cycle_mode, raw_categories=raw_categories)
 
     match file_format:
         case "csv":

@@ -142,17 +142,17 @@ def _read_nda_8(mm: mmap.mmap) -> pl.DataFrame:
     data_dtype = np.dtype(
         [
             ("_pad1", "V1"),
-            ("index", np.uint32),
-            ("cycle_count", np.uint32),
-            ("step_index", np.uint8),
-            ("step_type", np.uint8),
-            ("step_time_s", np.uint32),
-            ("voltage_V", np.int32),  # /10000
-            ("current_mA", np.int32),  # /10000
-            ("_pad2", "V8"),  # Maybe milliseconds or aux channels, not enough ref data to know
-            ("capacity_mAh", np.int64),  # /3600000
-            ("energy_mWh", np.int64),  # /3600000
-            ("unix_time_s", np.uint64),
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u1"),
+            ("step_type", "<u1"),
+            ("step_time_s", "<u4"),
+            ("voltage_V", "<i4"),  # /10000
+            ("current_mA", "<i4"),  # /10000
+            ("_pad2", "V8"),
+            ("capacity_mAh", "<i8"),  # /3600000
+            ("energy_mWh", "<i8"),  # /3600000
+            ("unix_time_s", "<u8"),
             ("_pad3", "V4"),  # Possibly a checksum
         ]
     )
@@ -195,29 +195,29 @@ def _read_nda_29(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
     data_mask = arr[:, 0] == 85
     data_dtype = np.dtype(
         [
-            ("_pad1", "V2"),  # 0-1
-            ("index", np.uint32),  # 2-5
-            ("cycle_count", np.uint32),  # 6-9
-            ("step_index", np.uint16),  # 10-11
-            ("step_type", np.uint8),  # 12
-            ("step_count", np.uint8),  # 13 (records jumps)
-            ("step_time_s", np.uint64),  # 14-21
-            ("voltage_V", np.int32),  # 22-25
-            ("current_mA", np.int32),  # 26-29
-            ("_pad3", "V8"),  # 30-37
-            ("charge_capacity_mAh", np.int64),  # 38-45
-            ("discharge_capacity_mAh", np.int64),  # 46-53
-            ("charge_energy_mWh", np.int64),  # 54-61
-            ("discharge_energy_mWh", np.int64),  # 62-69
-            ("Y", np.uint16),  # 70-71
-            ("M", np.uint8),  # 72
-            ("D", np.uint8),  # 73
-            ("h", np.uint8),  # 74
-            ("m", np.uint8),  # 75
-            ("s", np.uint8),  # 76
-            ("_pad4", "V1"),  # 77
-            ("range", np.int32),  # 78-81
-            ("_pad5", "V4"),  # 82-85
+            ("_pad1", "V2"),
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u2"),
+            ("step_type", "<u1"),
+            ("step_count", "<u1"),  # Records jumps
+            ("step_time_s", "<u8"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
+            ("_pad3", "V8"),
+            ("charge_capacity_mAh", "<i8"),
+            ("discharge_capacity_mAh", "<i8"),
+            ("charge_energy_mWh", "<i8"),
+            ("discharge_energy_mWh", "<i8"),
+            ("Y", "<u2"),
+            ("M", "<u1"),
+            ("D", "<u1"),
+            ("h", "<u1"),
+            ("m", "<u1"),
+            ("s", "<u1"),
+            ("_pad4", "V1"),
+            ("range", "<i4"),
+            ("_pad5", "V4"),
         ]
     )
     assert data_dtype.names is not None  # noqa: S101
@@ -257,14 +257,14 @@ def _read_nda_29(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
     aux_mask = arr[:, 0] == 101
     aux_dtype = np.dtype(
         [
-            ("_pad1", "V1"),  # 0
-            ("aux", np.uint8),  # 1
-            ("index", np.uint32),  # 2-5
-            ("_pad2", "V16"),  # 6-21
-            ("aux_voltage_volt", np.int32),  # 22-25
-            ("_pad3", "V8"),  # 26-33
-            ("aux_temperature_degC", np.int16),  # 34-35
-            ("_pad4", "V50"),  # 36-81
+            ("_pad1", "V1"),
+            ("aux", "<u1"),
+            ("index", "<u4"),
+            ("_pad2", "V16"),
+            ("aux_voltage_volt", "<i4"),
+            ("_pad3", "V8"),
+            ("aux_temperature_degC", "<i2"),
+            ("_pad4", "V50"),
         ]
     )
     assert aux_dtype.names is not None  # noqa: S101
@@ -293,20 +293,20 @@ def _read_nda_130_91(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
     mask = (arr[:, 0] == 85) & (arr[:, 8:12].view(np.uint32) != 0).flatten()
     dtype_list = [
         ("_pad1", "V2"),
-        ("step_index", np.uint8),
-        ("step_type", np.uint8),
+        ("step_index", "<u1"),
+        ("step_type", "<u1"),
         ("_pad2", "V4"),
-        ("index", np.uint32),
-        ("total_time_s", np.uint32),
-        ("time_ns", np.uint32),
-        ("current_mA", np.float32),
-        ("voltage_V", np.float32),
-        ("capacity_mAs", np.float32),
-        ("energy_mWs", np.float32),
-        ("cycle_count", np.uint32),
+        ("index", "<u4"),
+        ("total_time_s", "<u4"),
+        ("time_ns", "<u4"),
+        ("current_mA", "<f4"),
+        ("voltage_V", "<f4"),
+        ("capacity_mAs", "<f4"),
+        ("energy_mWs", "<f4"),
+        ("cycle_count", "<u4"),
         ("_pad3", "V4"),
-        ("unix_time_s", np.uint32),
-        ("uts_ns", np.uint32),
+        ("unix_time_s", "<u4"),
+        ("uts_ns", "<u4"),
     ]
     if record_len > 52:
         dtype_list.append(("_pad4", f"V{record_len - 52}"))
@@ -348,10 +348,10 @@ def _read_nda_130_91(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
     if record_len == 56:
         aux_dtype = np.dtype(
             [
-                ("_pad1", "V8"),  # 0-7
-                ("index", np.uint32),  # 8-11
-                ("_pad2", "V40"),  # 12-51
-                ("aux_temperature_degC", np.float32),  # 52-55
+                ("_pad1", "V8"),
+                ("index", "<u4"),
+                ("_pad2", "V40"),
+                ("aux_temperature_degC", "<f4"),
             ]
         )
         assert aux_dtype.names is not None  # noqa: S101
@@ -379,20 +379,20 @@ def _read_nda_130_90(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
 
     data_dtype = np.dtype(
         [
-            ("_pad1", "V9"),  # 0-8
-            ("step_index", np.uint8),  # 9
-            ("step_type", np.uint8),  # 10
-            ("_pad2", "V5"),  # 11-15
-            ("index", np.uint32),  # 16-19
-            ("_pad3", "V8"),  # 20-27
-            ("step_time_s", np.uint64),  # 28-35
-            ("voltage_V", np.float32),  # 36-39
-            ("current_mA", np.float32),  # 40-43
-            ("_pad4", "V16"),  # 44-51
-            ("capacity_mAh", np.float32),  # 60-63
-            ("energy_mWh", np.float32),  # 64-67
-            ("unix_time_s", np.uint64),  # 68-75
-            ("_pad5", "V12"),  # 76-87
+            ("_pad1", "V9"),
+            ("step_index", "<u1"),
+            ("step_type", "<u1"),
+            ("_pad2", "V5"),
+            ("index", "<u4"),
+            ("_pad3", "V8"),
+            ("step_time_s", "<u8"),
+            ("voltage_V", "<f4"),
+            ("current_mA", "<f4"),
+            ("_pad4", "V16"),
+            ("capacity_mAh", "<f4"),
+            ("energy_mWh", "<f4"),
+            ("unix_time_s", "<u8"),
+            ("_pad5", "V12"),
         ]
     )
     assert data_dtype.names is not None  # noqa: S101
@@ -411,14 +411,14 @@ def _read_nda_130_90(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
 
     aux_dtype = np.dtype(
         [
-            ("_pad1", "V5"),  # 0-4
-            ("aux", np.uint8),  # 5
-            ("index", np.uint32),  # 6-9
-            ("_pad2", "V16"),  # 10-25
-            ("aux_voltage_volt", np.int32),  # 26-29
-            ("_pad3", "V8"),  # 30-37
-            ("aux_temperature_degC", np.int16),  # 38-41
-            ("_pad4", "V48"),  # 42-87
+            ("_pad1", "V5"),
+            ("aux", "<u1"),
+            ("index", "<u4"),
+            ("_pad2", "V16"),
+            ("aux_voltage_volt", "<i4"),
+            ("_pad3", "V8"),
+            ("aux_temperature_degC", "<i2"),
+            ("_pad4", "V48"),
         ]
     )
     assert aux_dtype.names is not None  # noqa: S101

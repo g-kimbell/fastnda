@@ -16,10 +16,12 @@ state_dict = {
     13: "Pause",
     16: "Pulse",
     17: "SIM",
+    18: "PCCCV_Chg",
     19: "CV_DChg",
     20: "CCCV_DChg",
     21: "Control",
     22: "OCV",
+    25: "Ramp",
     26: "CPCV_DChg",
     27: "CPCV_Chg",
 }
@@ -35,7 +37,7 @@ dtype_dict = {
     "cycle_count": pl.UInt32,
     "step_count": pl.UInt32,
     "step_index": pl.UInt32,
-    "step_type": pl.Enum(state_dict.values()),
+    "step_type": pl.Categorical,
     "capacity_mAh": pl.Float32,
     "energy_mWh": pl.Float32,
 }

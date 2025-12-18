@@ -22,6 +22,7 @@ class TestCliWithOptionalDeps:
     current_folder = current_dir = Path(__file__).parent
     test_file = current_folder / "test_data" / "21_10_7_85.ndax"
     ref_df = fastnda.read(test_file)
+    ref_df_raw_categories = fastnda.read(test_file, raw_categories=True)
 
     def test_convert_hdf5(self, tmp_path: Path) -> None:
         """Converting HDF5 with pandas."""
@@ -94,6 +95,24 @@ class TestCliWithOptionalDeps:
             check_dtypes=False,
         )
 
+    def test_convert_csv_raw_categories(self, tmp_path: Path) -> None:
+        """Converting csv with raw categories."""
+        output = tmp_path / self.test_file.with_suffix(".csv").name
+        result = self.runner.invoke(
+            app,
+            [
+                "convert",
+                str(self.test_file),
+                str(output),
+                "--format=csv",
+                "--raw-categories",
+            ],
+        )
+        assert result.exit_code == 0
+        assert output.exists()
+        df = pl.read_csv(output)
+        assert_frame_equal(df, self.ref_df_raw_categories, check_dtypes=False)
+
     def test_convert_parquet(self, tmp_path: Path) -> None:
         """Converting polars-style parquet."""
         output = tmp_path / self.test_file.with_suffix(".parquet").name
@@ -110,6 +129,24 @@ class TestCliWithOptionalDeps:
         assert output.exists()
         df = pl.read_parquet(output)
         assert_frame_equal(df, self.ref_df)
+
+    def test_convert_parquet_raw_categories(self, tmp_path: Path) -> None:
+        """Converting polars-style parquet with raw categories."""
+        output = tmp_path / self.test_file.with_suffix(".parquet").name
+        result = self.runner.invoke(
+            app,
+            [
+                "convert",
+                str(self.test_file),
+                str(output),
+                "--format=parquet",
+                "--raw-categories",
+            ],
+        )
+        assert result.exit_code == 0
+        assert output.exists()
+        df = pl.read_parquet(output)
+        assert_frame_equal(df, self.ref_df_raw_categories)
 
     def test_convert_arrow(self, tmp_path: Path) -> None:
         """Converting polars-style arrow."""
