@@ -4,7 +4,6 @@
 [![codecov](https://codecov.io/gh/g-kimbell/fastnda/graph/badge.svg?token=BB3FA6IKER)](https://codecov.io/gh/g-kimbell/fastnda)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/g-kimbell/fastnda/blob/main/LICENSE)
 
-
 # _FastNDA_
 
 Python tool to read Neware .nda and .ndax binary files fast.
@@ -16,7 +15,7 @@ This fork explores larger, performance-focused changes that are difficult to lan
 FastNDA uses `polars`, parallelization, and vectorized buffer reading to significantly reduce processing time.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/59abf7f2-c5b9-4e48-b1cc-4a4a133ee168" width="500" align="center" alt="Aurora cycler manager">
+  <img src="https://github.com/user-attachments/assets/d0f43b0d-feba-41f9-8303-26aa99844192" width="500" align="center" alt="Aurora cycler manager">
 </p>
 <p align="center">
   Time to convert a ~100 MB, 1.3-million-row .ndax file to .csv. Best of three runs.<br>1) Cold start from command-line interface, including module imports.<br>2) Processing time only, without UI navigation.
