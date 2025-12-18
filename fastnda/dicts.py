@@ -16,10 +16,12 @@ state_dict = {
     13: "Pause",
     16: "Pulse",
     17: "SIM",
+    18: "PCCCV_Chg",
     19: "CV_DChg",
     20: "CCCV_DChg",
     21: "Control",
     22: "OCV",
+    25: "Ramp",
     26: "CPCV_DChg",
     27: "CPCV_Chg",
 }
