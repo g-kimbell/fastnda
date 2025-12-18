@@ -217,28 +217,28 @@ def read_ndc(buf: bytes) -> pl.DataFrame:
 def _read_ndc_2_filetype_1(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
-            ("_pad1", "V8"),  # 0-7
-            ("index", np.uint32),  # 8-11
-            ("cycle_count", np.uint32),  # 12-15
-            ("step_index", np.uint8),  # 16
-            ("step_type", np.uint8),  # 17
-            ("_pad2", "V5"),  # 18-22
-            ("step_time_s", np.uint64),  # 23-30
-            ("voltage_V", np.int32),  # 31-34
-            ("current_mA", np.int32),  # 35-38
-            ("_pad3", "V4"),  # 39-42
-            ("charge_capacity_mAh", np.int64),  # 43-50
-            ("discharge_capacity_mAh", np.int64),  # 51-58
-            ("charge_energy_mWh", np.int64),  # 59-66
-            ("discharge_energy_mWh", np.int64),  # 67-74
-            ("Y", np.uint16),  # 75-76
-            ("M", np.uint8),  # 77
-            ("D", np.uint8),  # 78
-            ("h", np.uint8),  # 79
-            ("m", np.uint8),  # 80
-            ("s", np.uint8),  # 81
-            ("range", np.int32),  # 82-85
-            ("_pad4", "V8"),  # 86-93
+            ("_pad1", "V8"),
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u1"),
+            ("step_type", "<u1"),
+            ("_pad2", "V5"),
+            ("step_time_s", "<u8"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
+            ("_pad3", "V4"),
+            ("charge_capacity_mAh", "<i8"),
+            ("discharge_capacity_mAh", "<i8"),
+            ("charge_energy_mWh", "<i8"),
+            ("discharge_energy_mWh", "<i8"),
+            ("Y", "<u2"),
+            ("M", "<u1"),
+            ("D", "<u1"),
+            ("h", "<u1"),
+            ("m", "<u1"),
+            ("s", "<u1"),
+            ("range", "<i4"),
+            ("_pad4", "V8"),
         ]
     )
     return (
@@ -276,14 +276,14 @@ def _read_ndc_2_filetype_5(buf: bytes) -> pl.DataFrame:
     # This dtype is missing humudity % column - does not exist in current test data
     dtype = np.dtype(
         [
-            ("_pad2", "V8"),  # 4-7
-            ("index", np.uint32),  # 8-11
-            ("_pad3", "V19"),  # 12 - 30
-            ("voltage_V", np.int32),  # 31-34
-            ("_pad4", "V6"),  # 35-40
-            ("temperature_degC", np.int16),  # 41-42
-            ("temperature_setpoint_degC", np.int16),  # 43-44
-            ("_pad5", "V49"),  # 45-93
+            ("_pad2", "V8"),
+            ("index", "<u4"),
+            ("_pad3", "V19"),
+            ("voltage_V", "<i4"),
+            ("_pad4", "V6"),
+            ("temperature_degC", "<i2"),
+            ("temperature_setpoint_degC", "<i2"),
+            ("_pad5", "V49"),
         ]
     )
     df = _bytes_to_df(buf, dtype, data_start_ind=5, record_size=512, use_bitmask=False).with_columns(
@@ -304,26 +304,26 @@ def _read_ndc_5_filetype_1(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("_pad1", "V1"),
-            ("index", np.uint32),
-            ("cycle_count", np.uint32),
-            ("step_index", np.uint8),
-            ("step_type", np.uint8),
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u1"),
+            ("step_type", "<u1"),
             ("_pad2", "V5"),
-            ("step_time_s", np.uint64),
-            ("voltage_V", np.int32),
-            ("current_mA", np.int32),
+            ("step_time_s", "<u8"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
             ("_pad3", "V4"),
-            ("charge_capacity_mAh", np.int64),
-            ("discharge_capacity_mAh", np.int64),
-            ("charge_energy_mWh", np.int64),
-            ("discharge_energy_mWh", np.int64),
-            ("Y", np.uint16),
-            ("M", np.uint8),
-            ("D", np.uint8),
-            ("h", np.uint8),
-            ("m", np.uint8),
-            ("s", np.uint8),
-            ("range", np.int32),
+            ("charge_capacity_mAh", "<i8"),
+            ("discharge_capacity_mAh", "<i8"),
+            ("charge_energy_mWh", "<i8"),
+            ("discharge_energy_mWh", "<i8"),
+            ("Y", "<u2"),
+            ("M", "<u1"),
+            ("D", "<u1"),
+            ("h", "<u1"),
+            ("m", "<u1"),
+            ("s", "<u1"),
+            ("range", "<i4"),
             ("_pad4", "V8"),
         ]
     )
@@ -362,12 +362,12 @@ def _read_ndc_5_filetype_5(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("_pad2", "V1"),
-            ("index", np.uint32),
+            ("index", "<u4"),
             ("_pad3", "V19"),
-            ("voltage_V", np.int32),
+            ("voltage_V", "<i4"),
             ("_pad4", "V6"),
-            ("temperature_degC", np.int16),
-            ("temperature_setpoint_degC", np.int16),
+            ("temperature_degC", "<i2"),
+            ("temperature_setpoint_degC", "<i2"),
             ("_pad5", "V49"),
         ]
     )
@@ -425,7 +425,7 @@ def _read_ndc_11_filetype_5(buf: bytes) -> pl.DataFrame:
         dtype = np.dtype(
             [
                 ("_pad1", "V1"),
-                ("index", "<i4"),
+                ("index", "<u4"),
                 ("Aux", "<i1"),
                 ("_pad2", "V29"),
                 ("temperature_degC", "<i2"),
@@ -449,10 +449,10 @@ def _read_ndc_11_filetype_5(buf: bytes) -> pl.DataFrame:
 def _read_ndc_11_filetype_7(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
-            ("cycle_count", "<i4"),
-            ("step_index", "<i4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u4"),
             ("_pad1", "V16"),
-            ("step_type", "<i1"),
+            ("step_type", "<u1"),
             ("_pad2", "V12"),
         ]
     )
@@ -467,7 +467,7 @@ def _read_ndc_11_filetype_7(buf: bytes) -> pl.DataFrame:
 def _read_ndc_11_filetype_18(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
-            ("step_time_s", "<i4"),
+            ("step_time_s", "<u4"),
             ("_pad1", "V1"),
             ("charge_capacity_mAh", "<f4"),
             ("discharge_capacity_mAh", "<f4"),
@@ -475,10 +475,10 @@ def _read_ndc_11_filetype_18(buf: bytes) -> pl.DataFrame:
             ("discharge_energy_mWh", "<f4"),
             ("_pad2", "V8"),
             ("dt", "<i4"),
-            ("unix_time_s", "<i4"),
-            ("step_count", "<i4"),
-            ("index", "<i4"),
-            ("uts_ms", "<i2"),
+            ("unix_time_s", "<u4"),
+            ("step_count", "<u4"),
+            ("index", "<u4"),
+            ("uts_ms", "<u2"),
         ]
     )
     return (
@@ -527,10 +527,10 @@ def _read_ndc_14_filetype_5(buf: bytes) -> pl.DataFrame:
 def _read_ndc_14_filetype_7(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
-            ("cycle_count", "<i4"),
-            ("step_index", "<i4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u4"),
             ("_pad1", "V16"),
-            ("step_type", "<i1"),
+            ("step_type", "<u1"),
             ("_pad2", "V12"),
         ]
     )
@@ -545,7 +545,7 @@ def _read_ndc_14_filetype_7(buf: bytes) -> pl.DataFrame:
 def _read_ndc_14_filetype_18(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
-            ("step_time_s", "<i4"),
+            ("step_time_s", "<u4"),
             ("_pad1", "V1"),
             ("charge_capacity_mAh", "<f4"),
             ("discharge_capacity_mAh", "<f4"),
@@ -553,9 +553,9 @@ def _read_ndc_14_filetype_18(buf: bytes) -> pl.DataFrame:
             ("discharge_energy_mWh", "<f4"),
             ("_pad2", "V8"),
             ("dt", "<i4"),
-            ("unix_time_s", "<i4"),
-            ("step_count", "<i4"),
-            ("index", "<i4"),
+            ("unix_time_s", "<u4"),
+            ("step_count", "<u4"),
+            ("index", "<u4"),
             ("uts_ms", "<i2"),
             ("_pad3", "V8"),
         ]
@@ -618,12 +618,12 @@ def _read_ndc_16_filetype_5(buf: bytes) -> pl.DataFrame:
 def _read_ndc_16_filetype_7(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
-            ("cycle_count", "<i4"),
-            ("step_index", "<i4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u4"),
             ("_pad1", "V16"),
-            ("step_type", "<i1"),
+            ("step_type", "<u1"),
             ("_pad2", "V8"),
-            ("index", "<i4"),
+            ("index", "<u4"),
             ("_pad3", "V63"),
         ]
     )
@@ -638,7 +638,7 @@ def _read_ndc_16_filetype_7(buf: bytes) -> pl.DataFrame:
 def _read_ndc_16_filetype_18(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
-            ("step_time_s", "<i4"),
+            ("step_time_s", "<u4"),
             ("_pad1", "V1"),
             ("charge_capacity_mAh", "<f4"),
             ("discharge_capacity_mAh", "<f4"),
@@ -646,10 +646,10 @@ def _read_ndc_16_filetype_18(buf: bytes) -> pl.DataFrame:
             ("discharge_energy_mWh", "<f4"),
             ("_pad2", "V8"),
             ("dt", "<i4"),
-            ("unix_time_s", "<i4"),
-            ("step_count", "<i4"),
-            ("index", "<i4"),
-            ("uts_ms", "<i2"),
+            ("unix_time_s", "<u4"),
+            ("step_count", "<u4"),
+            ("index", "<u4"),
+            ("uts_ms", "<u2"),
             ("_pad3", "V53"),
         ]
     )
@@ -677,12 +677,12 @@ def _read_ndc_17_filetype_1(buf: bytes) -> pl.DataFrame:
 def _read_ndc_17_filetype_7(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
-            ("cycle_count", "<i4"),
-            ("step_index", "<i4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u4"),
             ("_pad1", "V16"),
-            ("step_type", "<i1"),
+            ("step_type", "<u1"),
             ("_pad2", "V8"),
-            ("step_count", "<i4"),
+            ("step_count", "<u4"),
             ("_pad3", "V63"),
         ]
     )
@@ -697,7 +697,7 @@ def _read_ndc_17_filetype_7(buf: bytes) -> pl.DataFrame:
 def _read_ndc_17_filetype_18(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
-            ("step_time_s", "<i4"),
+            ("step_time_s", "<u4"),
             ("_pad1", "V1"),
             ("charge_capacity_mAh", "<f4"),
             ("discharge_capacity_mAh", "<f4"),
@@ -705,10 +705,10 @@ def _read_ndc_17_filetype_18(buf: bytes) -> pl.DataFrame:
             ("discharge_energy_mWh", "<f4"),
             ("_pad2", "V8"),
             ("dt", "<i4"),
-            ("unix_time_s", "<i4"),
-            ("step_count", "<i4"),
-            ("index", "<i4"),
-            ("uts_ms", "<i2"),
+            ("unix_time_s", "<u4"),
+            ("step_count", "<u4"),
+            ("index", "<u4"),
+            ("uts_ms", "<u2"),
             ("_pad3", "V53"),
         ]
     )
