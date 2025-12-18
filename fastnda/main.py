@@ -78,9 +78,10 @@ def read(
     df = df.with_columns(cols)
 
     # Ensure columns have correct data types
+    dtypes = dtype_dict.copy()
     if raw_categories:
-        dtype_dict["step_type"] = pl.UInt8
-    df = df.with_columns([pl.col(name).cast(dtype_dict[name]) for name in df.columns if name in dtype_dict])
+        dtypes["step_type"] = pl.UInt8
+    df = df.with_columns([pl.col(name).cast(dtypes[name]) for name in df.columns if name in dtypes])
 
     # Reorder columns
     non_aux_columns = [name for name in dtype_dict if name in df.columns]
