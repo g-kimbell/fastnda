@@ -42,11 +42,11 @@ import fastnda
 
 df = fastnda.read("my/neware/file.ndax")
 ```
-This returns a polars dataframe. If you would prefer to use pandas, you can do a zero-copy conversion with:
+This returns a `polars` dataframe. If you would prefer to use `pandas`, you can do a zero-copy conversion with:
 ```python
 df = df.to_pandas()
 ```
-You will need pandas and pyarrow installed for this.
+You will need `pandas` and `pyarrow` installed for this.
 
 You can also get file metadata as a dictionary with:
 ```python
@@ -84,14 +84,14 @@ fastnda convert --help
 > fastnda convert "my/neware/file.ndax" --format=parquet --pandas
 > ```
 >
-> If you write directly from `polars`, categorical columns are written in a way that cannot be read by pandas.
-> This is an issue with pyarrow/pandas, not FastNDA.
+> If you write directly from `polars`, categorical columns are written in a way that cannot be read by `pandas`.
+> This is an issue with `pyarrow`/`pandas`, not FastNDA.
 
 ## Differences between BTSDA and FastNDA
 
-This package generally adheres very closely to the outputs from BTSDA, but there are some subtle differences aside from column names:
+This package generally adheres very closely to the outputs from Neware's BTSDA, but there are some subtle differences aside from column names:
 - Capacity and energy
-  - In Neware, capacity and energy can have separate columns for charge and discharge, and both can be positive
+  - In BTSDA, capacity and energy can have separate columns for charge and discharge, and both can be positive
   - In FastNDA, capacity and energy are one column, charge is positive and discharge is negative
   - In FastNDA, a negative current during charge will count negatively to the capacity, in Neware it is ignored
 - Cycle count
@@ -127,3 +127,15 @@ We are always in need of test data sets, as there are many different .nda and .n
 Ideally, test data is small. We need the .nda/.ndax file and may ask you for a .csv exported from BTSDA if we cannot open the file. We will only put test data in the public tests on GitHub if you agree.
 
 Code contributions are very welcome, please clone the repo, use `pip install -e .[dev]` for dev dependencies.
+
+
+## Acknowledgements
+
+This project and its upstream [`NewareNDA`](https://github.com/d-cogswell/NewareNDA) are both made possible through community contributions from scientists with different ideas, equipment, and data.
+
+This software was developed at the Laboratory of Materials for Energy Conversion at Empa, the Swiss Federal Laboratories for Materials Science and Technology, and supported by funding from the [IntelLiGent](https://heuintelligent.eu/) project from the European Union’s research and innovation program under grant agreement No. 101069765, and from the Swiss State Secretariat for Education, Research, and Innovation (SERI) under contract No. 22.001422.
+
+<img src="https://github.com/user-attachments/assets/373d30b2-a7a4-4158-a3d8-f76e3a45a508#gh-light-mode-only" height="100" alt="IntelLiGent logo">
+<img src="https://github.com/user-attachments/assets/9d003d4f-af2f-497a-8560-d228cc93177c#gh-dark-mode-only" height="100" alt="IntelLiGent logo">&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="https://github.com/user-attachments/assets/1d32a635-703b-432c-9d42-02e07d94e9a9" height="100" alt="EU flag">&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="https://github.com/user-attachments/assets/cd410b39-5989-47e5-b502-594d9a8f5ae1" height="100" alt="Swiss secretariat">
