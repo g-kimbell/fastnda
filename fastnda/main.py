@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def read(
     file: str | Path, cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "chg", *, raw_categories: bool = False
 ) -> pl.DataFrame:
-    """Read electrochemical data from an Neware nda or ndax binary file.
+    """Read Neware nda or ndax binary file into polars DataFrame.
 
     Args:
         file: Path of .nda or .ndax file to read
@@ -26,6 +26,7 @@ def read(
             'dchg': Cycle incremented by a discharge step following a charge.
             'auto': Identifies the first non-rest state as the incremental state.
             'raw': Leaves cycles as it is found in the Neware file.
+        raw_categories: Return `step_type` column as integer codes.
 
     Returns:
         DataFrame containing all records in the file
