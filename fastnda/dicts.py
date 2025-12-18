@@ -35,7 +35,7 @@ dtype_dict = {
     "cycle_count": pl.UInt32,
     "step_count": pl.UInt32,
     "step_index": pl.UInt32,
-    "step_type": pl.Enum(state_dict.values()),
+    "step_type": pl.Categorical,
     "capacity_mAh": pl.Float32,
     "energy_mWh": pl.Float32,
 }
