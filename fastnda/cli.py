@@ -67,7 +67,7 @@ RawCategoriesOption = Annotated[
 ]
 
 
-def require_pandas() -> None:
+def _require_pandas() -> None:
     """Check if pandas is installed."""
     try:
         import pandas as pd  # noqa: F401, PLC0415
@@ -80,7 +80,7 @@ def require_pandas() -> None:
         raise RuntimeError(msg) from e
 
 
-def require_tables() -> None:
+def _require_tables() -> None:
     """Check if pytables is installed for hdf5."""
     try:
         import tables  # noqa: F401, PLC0415
@@ -152,10 +152,10 @@ def convert(
     """
     file_format = file_format or _infer_extension(out_file) or "csv"
     if file_format in {"h5", "hdf5"}:
-        require_tables()
-        require_pandas()
+        _require_tables()
+        _require_pandas()
     elif pandas and file_format in {"parquet", "arrow", "feather"}:
-        require_pandas()
+        _require_pandas()
     if out_file is None:
         out_file = in_file.with_suffix("." + file_format)
     _convert_with_type(in_file, out_file, file_format, cycle_mode, pandas, raw_categories)
@@ -189,10 +189,10 @@ def batch_convert(
 
     """
     if file_format in {"h5", "hdf5"}:
-        require_pandas()
-        require_tables()
+        _require_pandas()
+        _require_tables()
     elif pandas and file_format in {"parquet", "arrow", "feather"}:
-        require_pandas()
+        _require_pandas()
 
     if not in_folder.exists():
         msg = f"Folder {in_folder} does not exist."

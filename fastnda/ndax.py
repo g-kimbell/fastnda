@@ -75,7 +75,7 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
         files_to_read = ["data.ndc", "data_runInfo.ndc", "data_step.ndc", *aux_filenames]
         dfs = {}
         with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(extract_and_bytes_to_df, zf, fname): fname for fname in files_to_read}
+            futures = {executor.submit(_extract_and_bytes_to_df, zf, fname): fname for fname in files_to_read}
             for future in as_completed(futures):
                 fname, df = future.result()
                 if df is not None:
@@ -123,11 +123,11 @@ def read_ndax_metadata(file: str | Path) -> dict[str, str | float]:
     return metadata
 
 
-def extract_and_bytes_to_df(zf: zipfile.ZipFile, filename: str) -> tuple[str, pl.DataFrame | None]:
+def _extract_and_bytes_to_df(zf: zipfile.ZipFile, filename: str) -> tuple[str, pl.DataFrame | None]:
     """Extract .ndc from a zipfile and reads it into a DataFrame."""
     if filename in zf.namelist():
         buf = zf.read(filename)
-        return filename, read_ndc(buf)
+        return filename, _read_ndc(buf)
     return filename, None
 
 
@@ -194,7 +194,7 @@ def _data_interpolation(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def read_ndc(buf: bytes) -> pl.DataFrame:
+def _read_ndc(buf: bytes) -> pl.DataFrame:
     """Read electrochemical data from a Neware ndc binary file.
 
     Args:
