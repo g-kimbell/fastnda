@@ -45,7 +45,11 @@ CycleModeOption = Annotated[
 ]
 PandasOption = Annotated[
     bool,
-    typer.Option("--pandas", "-p", help="Save with pandas-safe column types (only for parquet, arrow, feather)."),
+    typer.Option(
+        "--pandas",
+        "-p",
+        help="Save with pandas-safe column types (only for parquet, arrow, feather, without --raw-categories).",
+    ),
 ]
 RecursiveOption = Annotated[
     bool,
@@ -56,7 +60,10 @@ RecursiveOption = Annotated[
     ),
 ]
 RawCategoriesOption = Annotated[
-    bool, typer.Option("--raw-categories", help="Store step_type column as integer codes, e.g. 1 instead of 'CC_Chg'.")
+    bool,
+    typer.Option(
+        "--raw-categories", help="Store step_type categorical column as integer codes, e.g. 1 instead of 'CC_Chg'."
+    ),
 ]
 
 
