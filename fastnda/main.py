@@ -47,18 +47,6 @@ def read(file: str | Path, cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "
         cycle_mode = cast("Literal['chg', 'dchg', 'auto']", cycle_mode)
         df = _generate_cycle_number(df, cycle_mode)
 
-    # round time to ms, step_type -> categories, uts -> Timestamp
-    cols = [
-        pl.col("step_time_s").round(3),
-        pl.col("step_type").replace_strict(state_dict, default=None).alias("step_type"),
-    ]
-    if "capacity_mAh" not in df.columns:
-        cols += [
-            (pl.col("charge_capacity_mAh") - pl.col("discharge_capacity_mAh")).alias("capacity_mAh"),
-            (pl.col("charge_energy_mWh") - pl.col("discharge_energy_mWh")).alias("energy_mWh"),
-        ]
-    df = df.with_columns(cols)
-
     if "total_time_s" not in df.columns:
         max_df = (
             df.group_by("step_count")
@@ -69,6 +57,20 @@ def read(file: str | Path, cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "
         df = df.join(max_df, on="step_count", how="left").with_columns(
             (pl.col("step_time_s") + pl.col("max_step_time_s")).alias("total_time_s")
         )
+
+    # Round time to us, step_type -> categories, merge charge/discharge capacity/energy
+    cols = [
+        pl.col("step_time_s").round(6),
+        pl.col("total_time_s").round(6),
+        pl.col("unix_time_s").round(6),
+        pl.col("step_type").replace_strict(state_dict, default=None, return_dtype=pl.Categorical),
+    ]
+    if "capacity_mAh" not in df.columns:
+        cols += [
+            (pl.col("charge_capacity_mAh") - pl.col("discharge_capacity_mAh")).alias("capacity_mAh"),
+            (pl.col("charge_energy_mWh") - pl.col("discharge_energy_mWh")).alias("energy_mWh"),
+        ]
+    df = df.with_columns(cols)
 
     # Ensure columns have correct data types
     df = df.with_columns([pl.col(name).cast(dtype_dict[name]) for name in df.columns if name in dtype_dict])
