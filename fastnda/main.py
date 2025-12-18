@@ -14,7 +14,9 @@ from fastnda.utils import _generate_cycle_number, state_dict
 logger = logging.getLogger(__name__)
 
 
-def read(file: str | Path, cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "chg") -> pl.DataFrame:
+def read(
+    file: str | Path, cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "chg", *, raw_categories: bool = False
+) -> pl.DataFrame:
     """Read electrochemical data from an Neware nda or ndax binary file.
 
     Args:
@@ -63,8 +65,11 @@ def read(file: str | Path, cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "
         pl.col("step_time_s").round(6),
         pl.col("total_time_s").round(6),
         pl.col("unix_time_s").round(6),
-        pl.col("step_type").replace_strict(state_dict, default=None, return_dtype=pl.Categorical),
     ]
+    if not raw_categories:
+        cols += [
+            pl.col("step_type").replace_strict(state_dict, default=None, return_dtype=pl.Categorical),
+        ]
     if "capacity_mAh" not in df.columns:
         cols += [
             (pl.col("charge_capacity_mAh") - pl.col("discharge_capacity_mAh")).alias("capacity_mAh"),
@@ -73,6 +78,8 @@ def read(file: str | Path, cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "
     df = df.with_columns(cols)
 
     # Ensure columns have correct data types
+    if raw_categories:
+        dtype_dict["step_type"] = pl.UInt8
     df = df.with_columns([pl.col(name).cast(dtype_dict[name]) for name in df.columns if name in dtype_dict])
 
     # Reorder columns
