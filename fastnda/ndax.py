@@ -13,8 +13,8 @@ import xmltodict
 from defusedxml import ElementTree
 
 from fastnda.dicts import (
-    aux_chl_type_columns,
-    multiplier_dict,
+    AUX_CHL_MAP,
+    MULTIPLIER_MAP,
 )
 from fastnda.utils import _count_changes
 
@@ -101,8 +101,8 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
             aux_id = aux_dict.get("AuxID", -i)
 
             # If ? column exists, rename name by ChlType (T, t, H)
-            if "?" in aux_df.columns and aux_dict.get("ChlType") in aux_chl_type_columns:
-                col = aux_chl_type_columns[aux_dict["ChlType"]]
+            if "?" in aux_df.columns and aux_dict.get("ChlType") in AUX_CHL_MAP:
+                col = AUX_CHL_MAP[aux_dict["ChlType"]]
                 aux_df = aux_df.rename({"?": f"aux{aux_id}_{col}"})
             else:  # Otherwise just append aux ID to column names
                 aux_df = aux_df.rename({col: f"aux{aux_id}_{col}" for col in aux_df.columns if col not in ["index"]})
@@ -248,7 +248,7 @@ def _read_ndc_2_filetype_1(buf: bytes) -> pl.DataFrame:
                 pl.col("cycle_count") + 1,
                 pl.col("step_time_s").cast(pl.Float64) * 1e-3,
                 pl.col("voltage_V").cast(pl.Float32) * 1e-4,
-                pl.col("range").replace_strict(multiplier_dict, return_dtype=pl.Float64).alias("multiplier"),
+                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
                 pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
                     "timestamp"
                 ),
@@ -334,7 +334,7 @@ def _read_ndc_5_filetype_1(buf: bytes) -> pl.DataFrame:
                 pl.col("cycle_count") + 1,
                 pl.col("step_time_s").cast(pl.Float64) * 1e-3,
                 pl.col("voltage_V").cast(pl.Float32) * 1e-4,
-                pl.col("range").replace_strict(multiplier_dict, return_dtype=pl.Float64).alias("multiplier"),
+                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
                 pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
                     "timestamp"
                 ),

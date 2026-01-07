@@ -11,7 +11,7 @@ import pytest
 from polars.testing import assert_series_equal
 
 import fastnda
-from fastnda.dicts import state_dict
+from fastnda.dicts import STEP_TYPE_MAP
 from fastnda.main import _generate_cycle_number
 
 
@@ -33,6 +33,9 @@ def parsed_data(file_pair: tuple[Path, Path | None]) -> tuple[pl.DataFrame, pl.D
     return df, df_ref
 
 
+REV_STEP_TYPE_MAP = {v: k for k, v in STEP_TYPE_MAP.items()}
+
+
 class TestRead:
     """Compared parsed data to reference from BTSDA."""
 
@@ -41,8 +44,7 @@ class TestRead:
         test_file = Path(__file__).parent / "test_data" / "nw4-120-1-6-53.ndax"
         df1 = fastnda.read(test_file, cycle_mode="raw")
         df2 = fastnda.read(test_file, cycle_mode="chg")
-        step_type_mapping = {v: k for k, v in state_dict.items()}
-        df1 = df1.with_columns(pl.col("step_type").replace_strict(step_type_mapping, return_dtype=pl.Int32))
+        df1 = df1.with_columns(pl.col("step_type").replace_strict(REV_STEP_TYPE_MAP, return_dtype=pl.Int32))
         df1 = _generate_cycle_number(df1, "chg")
         assert_series_equal(df1["cycle_count"], df2["cycle_count"])
 
@@ -121,8 +123,7 @@ class TestRead:
         df, df_ref = parsed_data
         # If the default is wrong, check if cycle_mode auto is correct
         if not (df["cycle_count"] == df_ref["Cycle Index"]).all():
-            step_type_mapping = {v: k for k, v in state_dict.items()}
-            df2 = df.with_columns(pl.col("step_type").replace_strict(step_type_mapping, return_dtype=pl.Int32))
+            df2 = df.with_columns(pl.col("step_type").replace_strict(REV_STEP_TYPE_MAP, return_dtype=pl.Int32))
             df2 = _generate_cycle_number(df2, "auto")
             assert_series_equal(
                 df2["cycle_count"],
