@@ -6,10 +6,10 @@ from typing import Literal, cast
 
 import polars as pl
 
-from fastnda.dicts import dtype_dict
+from fastnda.dicts import DTYPE_MAP, STEP_TYPE_MAP
 from fastnda.nda import read_nda, read_nda_metadata
 from fastnda.ndax import read_ndax, read_ndax_metadata
-from fastnda.utils import _generate_cycle_number, state_dict
+from fastnda.utils import _generate_cycle_number
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def read(
     file: str | Path, cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "chg", *, raw_categories: bool = False
 ) -> pl.DataFrame:
-    """Read electrochemical data from an Neware nda or ndax binary file.
+    """Read Neware nda or ndax binary file into polars DataFrame.
 
     Args:
         file: Path of .nda or .ndax file to read
@@ -26,6 +26,7 @@ def read(
             'dchg': Cycle incremented by a discharge step following a charge.
             'auto': Identifies the first non-rest state as the incremental state.
             'raw': Leaves cycles as it is found in the Neware file.
+        raw_categories: Return `step_type` column as integer codes.
 
     Returns:
         DataFrame containing all records in the file
@@ -68,7 +69,7 @@ def read(
     ]
     if not raw_categories:
         cols += [
-            pl.col("step_type").replace_strict(state_dict, default=None, return_dtype=pl.Categorical),
+            pl.col("step_type").replace_strict(STEP_TYPE_MAP, default=None, return_dtype=pl.Categorical),
         ]
     if "capacity_mAh" not in df.columns:
         cols += [
@@ -78,13 +79,13 @@ def read(
     df = df.with_columns(cols)
 
     # Ensure columns have correct data types
-    dtypes = dtype_dict.copy()
+    dtype_map = dict(DTYPE_MAP)
     if raw_categories:
-        dtypes["step_type"] = pl.UInt8
-    df = df.with_columns([pl.col(name).cast(dtypes[name]) for name in df.columns if name in dtypes])
+        dtype_map["step_type"] = pl.UInt8
+    df = df.with_columns([pl.col(name).cast(dtype_map[name]) for name in df.columns if name in dtype_map])
 
     # Reorder columns
-    non_aux_columns = [name for name in dtype_dict if name in df.columns]
+    non_aux_columns = [name for name in DTYPE_MAP if name in df.columns]
     aux_columns = [name for name in df.columns if name.startswith("aux")]
     df = df.select(non_aux_columns + aux_columns)
 

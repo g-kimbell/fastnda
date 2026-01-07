@@ -6,12 +6,12 @@ from typing import Literal
 import numpy as np
 import polars as pl
 
-from fastnda.dicts import state_dict
+from fastnda.dicts import STEP_TYPE_MAP
 
 logger = logging.getLogger(__name__)
 
-charge_keys = [k for k, v in state_dict.items() if v.endswith("_Chg")]
-discharge_keys = [k for k, v in state_dict.items() if v.endswith("_DChg")]
+charge_keys = [k for k, v in STEP_TYPE_MAP.items() if v.endswith("_Chg")]
+discharge_keys = [k for k, v in STEP_TYPE_MAP.items() if v.endswith("_DChg")]
 
 
 def _generate_cycle_number(
