@@ -66,11 +66,11 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
             file_pairs,
             ids=[f.stem for f, _ in file_pairs],
             indirect=True,
-            scope="session",
+            scope="module",
         )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def file_pair(request: pytest.FixtureRequest) -> tuple:
     """Return one file_pair from the request as a fixture."""
     return request.param
