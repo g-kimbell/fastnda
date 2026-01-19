@@ -15,7 +15,7 @@ from fastnda.dicts import STEP_TYPE_MAP
 from fastnda.main import _generate_cycle_number
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def parsed_data(file_pair: tuple[Path, Path | None]) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Read in the data for each file pair ONCE."""
     test_file, ref_file = file_pair
@@ -293,7 +293,7 @@ class TestRead:
                     break
             else:
                 # raise an error
-                closest = min(results, key=results.get)
+                closest = min(results, key=lambda x: results[x])
                 msg = (
                     f"Could not find any column matching values of {test_col}, "
                     f"closest reference was {closest} with an average difference of {results[closest]}"
