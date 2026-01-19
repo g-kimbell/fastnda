@@ -31,6 +31,24 @@ STEP_TYPE_MAP = MappingProxyType(
     }
 )
 
+CHARGE_DISCHARGE_MAP = MappingProxyType(
+    {
+        1: 1,
+        2: 0,
+        3: 1,
+        7: 1,
+        8: 0,
+        9: 1,
+        10: 0,
+        17: 0,
+        18: 1,
+        19: 0,
+        20: 0,
+        26: 0,
+        27: 1,
+    }
+)
+
 # Final column datatypes (excluding aux columns)
 DTYPE_MAP: Mapping[str, type[pl.DataType]] = MappingProxyType(
     {
