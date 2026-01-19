@@ -73,7 +73,7 @@ fastnda convert-metadata "my/file.ndax"                 # Convert metadata to my
 > [!NOTE]
 > Old versions of `pyarrow` had an issue converting categorical columns to `pandas`, fixed in 23.0.0.
 > 
-> For compatibility with old pyarrow versions in arrow-based files (parquet/arrow/feather), you can convert to `pandas` first (`to_pandas()` or `--pandas`), or use integer codes for the categorical columns (`raw_categories=True` or `--raw-categories`) . 
+> For compatibility with old pyarrow versions in arrow-based files (parquet/arrow/feather), you can convert to `pandas` first with `to_pandas()` or `--pandas`, or use integer codes for the categorical columns with `raw_categories=True` or `--raw-categories`. 
 
 
 ## Help! My file can't be read / is converted incorrectly
