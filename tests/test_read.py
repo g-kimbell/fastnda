@@ -15,7 +15,7 @@ from fastnda.dicts import STEP_TYPE_MAP
 from fastnda.main import _generate_cycle_number
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def parsed_data(file_pair: tuple[Path, Path | None]) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Read in the data for each file pair ONCE."""
     test_file, ref_file = file_pair

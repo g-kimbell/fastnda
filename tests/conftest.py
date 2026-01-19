@@ -22,7 +22,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def data_dir(request: pytest.FixtureRequest) -> Path:
     """Add test data directory fixture."""
     path = Path(request.config.getoption("--data-dir"))
@@ -61,4 +61,16 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         # Create list of (input_file, output_file) tuples
         file_pairs = [(inputs[stem], outputs.get(stem)) for stem in inputs]
 
-        metafunc.parametrize("file_pair", file_pairs, ids=[f.stem for f, _ in file_pairs])
+        metafunc.parametrize(
+            "file_pair",
+            file_pairs,
+            ids=[f.stem for f, _ in file_pairs],
+            indirect=True,
+            scope="session",
+        )
+
+
+@pytest.fixture(scope="session")
+def file_pair(request: pytest.FixtureRequest) -> tuple:
+    """Return one file_pair from the request as a fixture."""
+    return request.param
