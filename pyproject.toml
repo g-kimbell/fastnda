@@ -29,14 +29,14 @@ dev = [
     "bumpver>=2025.1131",
     "pre-commit>=4.2.0",
     "pandas>=2.3.1",
-    "pyarrow>=22.0.0",
+    "pyarrow>=23.0.0",
     "pytest>=8.4.1",
     "ruff>=0.12.8",
     "tables>=3.10.1",
 ]
 extras = [
     "pandas>=2.3.1",
-    "pyarrow>=22.0.0",
+    "pyarrow>=23.0.0",
     "tables>=3.10.1",
 ]
 

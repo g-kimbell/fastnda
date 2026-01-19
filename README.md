@@ -59,7 +59,7 @@ The command-line interface can perform single-file or batch-file conversion to v
 ```shell
 fastnda convert "my/file.ndax"                          # Converts file to "my/file.csv"
 fastnda convert "my/file.ndax" "output/file.parquet"    # Convert file to different location and format
-fastnda convert "my/file.ndax" --format=arrow --pandas  # Convert to pandas-compatible arrow
+fastnda convert "my/file.ndax" --format=arrow --pandas  # Convert to old-pandas-compatible arrow
 
 fastnda batch-convert "my/folder/"                      # Convert all nda and ndax files in a folder to csv
 fastnda batch-convert "my/folder/" --format=h5          # Convert all files to hdf5
@@ -69,11 +69,6 @@ fastnda batch-convert "my/folder/" "output/folder/"     # Save all files in a di
 fastnda print-metadata "my/file.ndax"                   # Print metadata to terminal
 fastnda convert-metadata "my/file.ndax"                 # Convert metadata to my/file.json
 ```
-
-> [!NOTE]
-> `pyarrow <= v22.0.0` has an issue converting categorical columns to `pandas`, which should be fixed in its next release.
-> 
-> For now, to write arrow-based files (parquet/arrow/feather) that can be read by `pandas`, either convert to `pandas` first (`to_pandas()` or `--pandas`), or use integer codes for the categorical columns (`raw_categories=True` or `--raw-categories`). 
 
 
 ## Help! My file can't be read / is converted incorrectly
@@ -97,11 +92,18 @@ Differences compared to `NewareNDA`
   - There is only one capacity and one energy column
   - Time is explicitly split into step time and total time
 
-Besides speed, there are other benefits of using `fastnda` or `NewareNDA` over Neware's BTSDA:
+Other benefits of using `fastnda` or `NewareNDA` over Neware's BTSDA:
   - Batch or automated file conversion is straightforward with Python or CLI
   - BTSDA drops precision depending on the units you select, e.g. exporting to V is less precise than exporting to mV
   - BTSDA can drop precision over time, e.g. after 1e6 seconds, all millisecond precision can be dropped
   - Different BTSDA versions need to be installed to open different .nda or .ndax files
+
+Pandas compatibility
+ - Old versions of `pyarrow` had an issue converting categorical columns to `pandas`, fixed in 23.0.0.
+ - For compatibility with `pandas` in parquet/arrow/feather files, you can:
+   - Update to `pyarrow >= 23.0.0`.
+   - Convert to `pandas` first with `to_pandas()` or `--pandas`.
+   - Use integer codes for the categorical columns with `raw_categories=True` or `--raw-categories`. 
 
 
 ## Contributions
