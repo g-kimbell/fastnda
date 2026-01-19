@@ -130,6 +130,11 @@ class TestCliWithOptionalDeps:
         df = pl.read_parquet(output)
         assert_frame_equal(df, self.ref_df)
 
+        # With pyarrow 23 this should be compatible with pandas
+        df2 = pd.read_parquet(output)
+        df2 = pl.DataFrame(df2)
+        assert_frame_equal(df, df2)
+
     def test_convert_parquet_raw_categories(self, tmp_path: Path) -> None:
         """Converting polars-style parquet with raw categories."""
         output = tmp_path / self.test_file.with_suffix(".parquet").name
@@ -164,6 +169,11 @@ class TestCliWithOptionalDeps:
         assert output.exists()
         df = pl.read_ipc(output)
         assert_frame_equal(df, self.ref_df)
+
+        # With pyarrow 23 this should be compatible with pandas
+        df2 = pd.read_feather(output)
+        df2 = pl.DataFrame(df2)
+        assert_frame_equal(df, df2)
 
     def test_auto_output(self, tmp_path: Path) -> None:
         """Converting polars-style parquet without explicit output file."""
