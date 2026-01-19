@@ -70,11 +70,6 @@ fastnda print-metadata "my/file.ndax"                   # Print metadata to term
 fastnda convert-metadata "my/file.ndax"                 # Convert metadata to my/file.json
 ```
 
-> [!NOTE]
-> Old versions of `pyarrow` had an issue converting categorical columns to `pandas`, fixed in 23.0.0.
-> 
-> For compatibility with old pyarrow versions in arrow-based files (parquet/arrow/feather), you can convert to `pandas` first with `to_pandas()` or `--pandas`, or use integer codes for the categorical columns with `raw_categories=True` or `--raw-categories`. 
-
 
 ## Help! My file can't be read / is converted incorrectly
 
@@ -97,11 +92,18 @@ Differences compared to `NewareNDA`
   - There is only one capacity and one energy column
   - Time is explicitly split into step time and total time
 
-Besides speed, there are other benefits of using `fastnda` or `NewareNDA` over Neware's BTSDA:
+Other benefits of using `fastnda` or `NewareNDA` over Neware's BTSDA:
   - Batch or automated file conversion is straightforward with Python or CLI
   - BTSDA drops precision depending on the units you select, e.g. exporting to V is less precise than exporting to mV
   - BTSDA can drop precision over time, e.g. after 1e6 seconds, all millisecond precision can be dropped
   - Different BTSDA versions need to be installed to open different .nda or .ndax files
+
+Pandas compatibility
+ - Old versions of `pyarrow` had an issue converting categorical columns to `pandas`, fixed in 23.0.0.
+ - For compatibility with `pandas` in parquet/arrow/feather files, you can:
+   - Update to `pyarrow >= 23.0.0`.
+   - Convert to `pandas` first with `to_pandas()` or `--pandas`.
+   - Use integer codes for the categorical columns with `raw_categories=True` or `--raw-categories`. 
 
 
 ## Contributions
