@@ -293,7 +293,7 @@ class TestRead:
                     break
             else:
                 # raise an error
-                closest = min(results, key=results.get)
+                closest = min(results, key=lambda x: results[x])
                 msg = (
                     f"Could not find any column matching values of {test_col}, "
                     f"closest reference was {closest} with an average difference of {results[closest]}"
