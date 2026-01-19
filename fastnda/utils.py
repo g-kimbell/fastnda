@@ -58,6 +58,6 @@ def _id_first_state(df: pl.DataFrame) -> Literal["chg", "dchg"]:
     """Identify the first non-rest state in the DataFrame."""
     # Filter on non-rest keys, check first row
     filtered = df.filter(pl.col("step_type").is_in(CHARGE_DISCHARGE_MAP)).head(1)
-    if not filtered.is_empty() and filtered[0, "step_type"] == 1:
+    if not filtered.is_empty() and CHARGE_DISCHARGE_MAP[filtered[0, "step_type"]] == 1:
         return "chg"
     return "dchg"
