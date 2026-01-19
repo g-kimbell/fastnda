@@ -59,7 +59,7 @@ The command-line interface can perform single-file or batch-file conversion to v
 ```shell
 fastnda convert "my/file.ndax"                          # Converts file to "my/file.csv"
 fastnda convert "my/file.ndax" "output/file.parquet"    # Convert file to different location and format
-fastnda convert "my/file.ndax" --format=arrow --pandas  # Convert to pandas-compatible arrow
+fastnda convert "my/file.ndax" --format=arrow --pandas  # Convert to old-pandas-compatible arrow
 
 fastnda batch-convert "my/folder/"                      # Convert all nda and ndax files in a folder to csv
 fastnda batch-convert "my/folder/" --format=h5          # Convert all files to hdf5
@@ -71,9 +71,9 @@ fastnda convert-metadata "my/file.ndax"                 # Convert metadata to my
 ```
 
 > [!NOTE]
-> `pyarrow <= v22.0.0` has an issue converting categorical columns to `pandas`, which should be fixed in its next release.
+> Old versions of `pyarrow` had an issue converting categorical columns to `pandas`, fixed in 23.0.0.
 > 
-> For now, to write arrow-based files (parquet/arrow/feather) that can be read by `pandas`, either convert to `pandas` first (`to_pandas()` or `--pandas`), or use integer codes for the categorical columns (`raw_categories=True` or `--raw-categories`). 
+> For compatibility with old pyarrow versions in arrow-based files (parquet/arrow/feather), you can convert to `pandas` first (`to_pandas()` or `--pandas`), or use integer codes for the categorical columns (`raw_categories=True` or `--raw-categories`) . 
 
 
 ## Help! My file can't be read / is converted incorrectly

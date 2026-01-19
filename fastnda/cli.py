@@ -48,7 +48,7 @@ PandasOption = Annotated[
     typer.Option(
         "--pandas",
         "-p",
-        help="Save with pandas-safe column types (only for parquet, arrow, feather, without --raw-categories).",
+        help="Save with old pandas-compatible format (only for parquet, arrow, feather, without --raw-categories).",
     ),
 ]
 RecursiveOption = Annotated[
@@ -147,7 +147,7 @@ def convert(
             'dchg': Cycle incremented by a discharge step following a charge
             'auto': Identifies the first non-rest state as the incremental state
             'raw': Leaves cycles as it is found in the Neware file
-        pandas: Whether to save in pandas-safe format
+        pandas: Whether to save in old pandas-safe format
 
     """
     file_format = file_format or _infer_extension(out_file) or "csv"
@@ -185,7 +185,7 @@ def batch_convert(
             'auto': Identifies the first non-rest state as the incremental state
             'raw': Leaves cycles as it is found in the Neware file
         recursive: Whether to search recursively in subfolders
-        pandas: Whether to save in pandas-safe format
+        pandas: Whether to save in old pandas-safe format
 
     """
     if file_format in {"h5", "hdf5"}:
