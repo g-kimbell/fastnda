@@ -5,10 +5,10 @@
 <br>
 
 [![PyPI version](https://img.shields.io/pypi/v/fastnda.svg)](https://pypi.org/project/fastnda/)
-[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/g-kimbell/fastnda/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/empaeconversion/fastnda/blob/main/LICENSE)
 [![Python Versions](https://img.shields.io/pypi/pyversions/fastnda.svg)](https://pypi.org/project/fastnda/)
-[![Checks](https://img.shields.io/github/actions/workflow/status/g-kimbell/fastnda/test.yml)](https://github.com/g-kimbell/fastnda/actions/workflows/test.yml)
-[![Coverage](https://img.shields.io/codecov/c/github/g-kimbell/fastnda)](https://app.codecov.io/gh/g-kimbell/fastnda)
+[![Checks](https://img.shields.io/github/actions/workflow/status/empaeconversion/fastnda/test.yml)](https://github.com/empaeconversion/fastnda/actions/workflows/test.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/empaeconversion/fastnda)](https://app.codecov.io/gh/empaeconversion/fastnda)
 
 Python and command-line tool to read Neware .nda and .ndax files fast.
 
