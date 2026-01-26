@@ -3,6 +3,7 @@
 import logging
 import mmap
 import struct
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -27,48 +28,15 @@ def read_nda(file: str | Path) -> pl.DataFrame:
     file = Path(file)
     with file.open("rb") as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-
         if mm.read(6) != b"NEWARE":
             msg = f"{file} does not appear to be a Neware file."
             raise ValueError(msg)
-        # Get the NDA version
-        nda_version = int(mm[14])
-
-        # Reading depends on the NDA version
-        if nda_version == 8:
-            logger.info("Reading NDA version 8")
-            df = _read_nda_8(mm)
-            aux_df = pl.DataFrame()
-        elif nda_version == 29:
-            logger.info("Reading NDA version 29")
-            df, aux_df = _read_nda_29(mm)
-        elif nda_version == 130:
-            if mm[1024:1025] == b"\x55":
-                logger.info("Reading NDA version 130 BTS9.1")
-                df, aux_df = _read_nda_130_91(mm)
-            else:
-                logger.info("Reading NDA version 130 BTS9.0")
-                df, aux_df = _read_nda_130_90(mm)
-        else:
-            msg = f"NDA version {nda_version} is not yet supported!"
-            raise NotImplementedError(msg)
+        # Parse binary data to dataframe
+        df = _read_nda(mm)
 
     # Drop duplicate indexes and sort
     df = df.unique(subset="index")
-    df = df.sort(by="index")
-
-    # Join temperature data
-    if not aux_df.is_empty():
-        if "aux" in aux_df.columns:
-            aux_df = aux_df.unique(subset=["index", "aux"])
-            aux_df = aux_df.pivot(index="index", on="aux", separator="")
-            # Rename - add number to aux prefix e.g. aux1_voltage_volt
-            aux_df.columns = [f"aux{col[-1]}_{col[4:-1]}" if col != "index" else "index" for col in aux_df.columns]
-        else:
-            aux_df = aux_df.unique(subset=["index"])
-        df = df.join(aux_df, on="index", how="left")
-
-    return df
+    return df.sort(by="index")
 
 
 def read_nda_metadata(file: str | Path) -> dict[str, str | int | float]:
@@ -125,30 +93,83 @@ def read_nda_metadata(file: str | Path) -> dict[str, str | int | float]:
     return metadata
 
 
+def _find_header(mm: mmap.mmap, header: bytes | int) -> int:
+    """Get header index."""
+    if isinstance(header, int):
+        return header
+    header_idx = mm.find(header)
+    if header_idx == -1:
+        msg = "Could not find start of data section."
+        raise EOFError(msg)
+    return header_idx
+
+
+def _get_arr_from_nda(
+    mm: mmap.mmap,
+    header: bytes | int,
+    record_len: int,
+) -> np.ndarray:
+    """Read an nda file."""
+    header_idx = _find_header(mm, header)
+    num_records = (len(mm) - header_idx) // record_len
+    end = header_idx + num_records * record_len
+    return np.frombuffer(mm[header_idx:end], dtype=np.uint8).reshape((num_records, record_len))
+
+
+def _mask_arr(
+    arr: np.ndarray,
+    dtype: np.dtype,
+    mask: int,
+) -> pl.DataFrame:
+    """Get polars dataframe from array."""
+    assert dtype.names is not None  # noqa: S101
+    dtype_no_pad = dtype[[name for name in dtype.names if not name.startswith("_")]]
+    arr = arr.view(dtype_no_pad).flatten()
+    return pl.DataFrame(arr).filter(pl.col("identifier") == mask).drop("identifier")
+
+
+def _merge_aux(
+    df: pl.DataFrame,
+    aux_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """Merge aux left into data, renaming columns if aux channel in data."""
+    if not aux_df.is_empty():
+        if "aux" in aux_df.columns:
+            aux_df = aux_df.unique(subset=["index", "aux"])
+            aux_df = aux_df.pivot(index="index", on="aux", separator="")
+            # Rename - add number to aux prefix e.g. aux1_voltage_volt
+            aux_df.columns = [f"aux{col[-1]}_{col[4:-1]}" if col != "index" else "index" for col in aux_df.columns]
+        else:
+            aux_df = aux_df.unique(subset=["index"])
+        return df.join(aux_df, on="index", how="left")
+    return df
+
+
+def _read_nda(mm: mmap.mmap) -> pl.DataFrame:
+    """Figure out nda version and pass to correct reader."""
+    nda_version = int(mm[14])
+    reader = NDA_READERS.get(nda_version)
+    if reader is None:
+        msg = f"nda version {nda_version} is not yet supported!"
+        raise NotImplementedError(msg) from None
+    logger.debug("Reading nda version %d", nda_version)
+    return reader(mm)
+
+
 def _read_nda_8(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 8, return data and aux DataFrames."""
     # Identify the beginning of the data section - first byte 255 and index = 1
-    record_len = 59
-    identifier = b"\xff\x01\x00\x00\x00"
-    header = mm.find(identifier)
-    if header == -1:
-        msg = "Could not find start of data section."
-        raise EOFError(msg)
-    header = header + record_len
-    num_records = (len(mm) - header) // record_len
-    end = len(mm) - (len(mm) - header) % record_len
-    arr = np.frombuffer(mm[header:end], dtype=np.int8).reshape((num_records, record_len))
-
-    data_dtype = np.dtype(
+    arr = _get_arr_from_nda(mm, header=b"\xff\x01\x00\x00\x00", record_len=59)
+    dtype = np.dtype(
         [
-            ("_pad1", "V1"),
+            ("identifier", "<u1"),
             ("index", "<u4"),
             ("cycle_count", "<u4"),
             ("step_index", "<u1"),
             ("step_type", "<u1"),
             ("step_time_s", "<u4"),
             ("voltage_V", "<i4"),  # /10000
-            ("current_mA", "<i4"),  # /10000
+            ("current_mA", "<i4"),  # /1000
             ("_pad2", "V8"),
             ("capacity_mAh", "<i8"),  # /3600000
             ("energy_mWh", "<i8"),  # /3600000
@@ -156,14 +177,11 @@ def _read_nda_8(mm: mmap.mmap) -> pl.DataFrame:
             ("_pad3", "V4"),  # Possibly a checksum
         ]
     )
-    assert data_dtype.names is not None  # noqa: S101
-    data_dtype_no_pad = data_dtype[[name for name in data_dtype.names if not name.startswith("_")]]
-    data_arr = arr.view(data_dtype_no_pad).flatten()
-    return pl.DataFrame(data_arr).with_columns(
+    return _mask_arr(arr, dtype, 0).with_columns(
         [
             pl.col("step_time_s").cast(pl.Float32),
             pl.col("voltage_V").cast(pl.Float32) / 10000,
-            pl.col("current_mA").cast(pl.Float32) / 10000,
+            pl.col("current_mA").cast(pl.Float32) / 1000,
             (pl.col("capacity_mAh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
             (pl.col("energy_mWh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
             _count_changes(pl.col("step_index")).alias("step_count"),
@@ -171,31 +189,13 @@ def _read_nda_8(mm: mmap.mmap) -> pl.DataFrame:
     )
 
 
-def _read_nda_29(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
+def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 29, return data and aux DataFrames."""
-    # Identify the beginning of the data section - first byte 85 and index = 1
-    identifier = b"\x55\x00\x01\x00\x00\x00"
-    header = mm.find(identifier)
-    if header == -1:
-        msg = "Could not find start of data section."
-        raise EOFError(msg)
-
-    # Read data records
-    record_len = 86
-    num_records = (len(mm) - header) // record_len
-    arr = np.frombuffer(mm[header:], dtype=np.int8).reshape((num_records, record_len))
-
-    # Remove rows where last 4 bytes are zero
-    mask = (arr[:, 82:].view(np.int32) == 0).flatten()
-    arr = arr[mask]
-
-    # Split into two arrays, one for data and one for aux
-
-    # Data array - first byte is \x55
-    data_mask = arr[:, 0] == 85
+    arr = _get_arr_from_nda(mm, b"\x55\x00\x01\x00\x00\x00", 86)
     data_dtype = np.dtype(
         [
-            ("_pad1", "V2"),
+            ("identifier", "<u1"),
+            ("_pad1", "V1"),
             ("index", "<u4"),
             ("cycle_count", "<u4"),
             ("step_index", "<u2"),
@@ -220,12 +220,9 @@ def _read_nda_29(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
             ("_pad5", "V4"),
         ]
     )
-    assert data_dtype.names is not None  # noqa: S101
-    data_dtype_no_pad = data_dtype[[name for name in data_dtype.names if not name.startswith("_")]]
-    data_arr = arr[data_mask].view(data_dtype_no_pad).flatten()
-    data_df = pl.DataFrame(data_arr)
     data_df = (
-        data_df.with_columns(
+        _mask_arr(arr, data_dtype, 85)
+        .with_columns(
             [
                 pl.col("cycle_count") + 1,
                 pl.col("step_time_s").cast(pl.Float32) / 1000,
@@ -253,11 +250,9 @@ def _read_nda_29(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
         .drop(["Y", "M", "D", "h", "m", "s", "multiplier", "range"])
     )
 
-    # Aux array - first byte is \x65
-    aux_mask = arr[:, 0] == 101
     aux_dtype = np.dtype(
         [
-            ("_pad1", "V1"),
+            ("identifier", "<u1"),
             ("aux", "<u1"),
             ("index", "<u4"),
             ("_pad2", "V16"),
@@ -267,32 +262,36 @@ def _read_nda_29(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
             ("_pad4", "V50"),
         ]
     )
-    assert aux_dtype.names is not None  # noqa: S101
-    aux_dtype_no_pad = aux_dtype[[name for name in aux_dtype.names if not name.startswith("_")]]
-    aux_arr = arr[aux_mask].view(aux_dtype_no_pad).flatten()
-    aux_df = pl.DataFrame(aux_arr)
-    aux_df = aux_df.with_columns(
+    aux_df = _mask_arr(arr, aux_dtype, 101).with_columns(
         [
             pl.col("aux_temperature_degC").cast(pl.Float32) / 10,  # 0.1'C -> 'C
             pl.col("aux_voltage_volt").cast(pl.Float32) / 10000,  # 0.1 mV -> V
         ]
     )
+    return _merge_aux(data_df, aux_df)
 
-    return data_df, aux_df
+
+def _read_nda_130(mm: mmap.mmap) -> pl.DataFrame:
+    """Figure out whether BTS9.0 or BTS9.1 and pass to correct function."""
+    subver = int(mm[1024])
+    if subver == 85:
+        return _read_nda_130_91(mm)
+    if subver == 18:
+        return _read_nda_130_90(mm)
+    msg = f"nda 130 subversion {subver} not supported"
+    raise NotImplementedError(msg)
 
 
-def _read_nda_130_91(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
+def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 130 BTS9.1, return data and aux DataFrames."""
-    record_len = mm.find(mm[1024:1026], 1026) - 1024  # Get record length
-    num_records = (len(mm) - 2048) // record_len
+    # Data starts at 1024, search forward for next identifier for record length
+    record_len = mm.find(mm[1024:1026], 1026) - 1024
 
-    # Read data
-    arr = np.frombuffer(mm[1024 : 1024 + num_records * record_len], dtype=np.int8).reshape((num_records, record_len))
+    arr = _get_arr_from_nda(mm, 1024, record_len)
 
     # In BTS9.1, data and aux are in the same rows
-    mask = (arr[:, 0] == 85) & (arr[:, 8:12].view(np.uint32) != 0).flatten()
     dtype_list = [
-        ("_pad1", "V2"),
+        ("identifier", "<u2"),
         ("step_index", "<u1"),
         ("step_type", "<u1"),
         ("_pad2", "V4"),
@@ -304,21 +303,16 @@ def _read_nda_130_91(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
         ("capacity_mAs", "<f4"),
         ("energy_mWs", "<f4"),
         ("cycle_count", "<u4"),
-        ("_pad3", "V4"),
+        ("_pad3", "V4"),  # Data here, looks like <f4 doesn't match anything in ref
         ("unix_time_s", "<u4"),
         ("uts_ns", "<u4"),
+        ("aux_temperature_degC2", "<f4"),
     ]
-    if record_len > 52:
+    if record_len > 56:
         dtype_list.append(("_pad4", f"V{record_len - 52}"))
     data_dtype = np.dtype(dtype_list)
-    assert data_dtype.names is not None  # noqa: S101
-    data_dtype_no_pad = data_dtype[[name for name in data_dtype.names if not name.startswith("_")]]
 
-    # Mask, view, flatten, recalculate some columns
-    data_arr = arr[mask].view(data_dtype_no_pad)
-    data_arr = data_arr.flatten()
-    data_df = pl.DataFrame(data_arr)
-    data_df = data_df.with_columns(
+    data_df = _mask_arr(arr, data_dtype, 1621).with_columns(
         [
             pl.col("capacity_mAs").clip(lower_bound=0).alias("charge_capacity_mAh") / 3600,
             pl.col("capacity_mAs").clip(upper_bound=0).abs().alias("discharge_capacity_mAh") / 3600,
@@ -341,66 +335,35 @@ def _read_nda_130_91(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
     data_df = data_df.join(max_df, on="step_count", how="left").with_columns(
         (pl.col("total_time_s") - pl.col("max_total_time_s")).alias("step_time_s")
     )
-    data_df = data_df.drop(["uts_ns", "energy_mWs", "capacity_mAs", "time_ns", "max_total_time_s"])
-
-    # If the record length is 56, then there is an additional temperature column
-    # Read into separate DataFrame and merge later for compatibility with other versions
-    if record_len == 56:
-        aux_dtype = np.dtype(
-            [
-                ("_pad1", "V8"),
-                ("index", "<u4"),
-                ("_pad2", "V40"),
-                ("aux_temperature_degC", "<f4"),
-            ]
-        )
-        assert aux_dtype.names is not None  # noqa: S101
-        aux_dtype_no_pad = aux_dtype[[name for name in aux_dtype.names if not name.startswith("_")]]
-        aux_arr = arr[mask].view(aux_dtype_no_pad)
-        aux_arr = aux_arr.flatten()
-        aux_df = pl.DataFrame(aux_arr)
-    else:
-        aux_df = pl.DataFrame()
-
-    return data_df, aux_df
+    return data_df.drop(["uts_ns", "energy_mWs", "capacity_mAs", "time_ns", "max_total_time_s"])
 
 
-def _read_nda_130_90(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
+def _read_nda_130_90(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 130 BTS9.0, return data and aux DataFrames."""
-    record_len = 88
-    num_records = (len(mm) - 2048) // record_len
-
-    # Read data
-    arr = np.frombuffer(mm[1024 : 1024 + num_records * record_len], dtype=np.int8).reshape((num_records, record_len))
-
-    # Data and aux stored in different rows
-    data_mask = np.all(arr[:, :6] == arr[0, :6], axis=1).flatten()
-    aux_mask = (arr[:, 1:5].view(np.int32) == 101).flatten()
-
+    # Data start seems to be (18, 80, 0, 7, 85, 129, 1, 6)
+    # Aux identifiers are (18, 80, 0, 7, 88, 129, 1, 6) and (18, 80, 0, 7, 89, 129, 1, 6)
+    arr = _get_arr_from_nda(mm, header=b"\x12\x50\x00\x07\x55\x81\x01\x06", record_len=88)
     data_dtype = np.dtype(
         [
-            ("_pad1", "V9"),
+            ("_pad1", "V4"),
+            ("identifier", "<u1"),
+            ("_pad2", "V4"),
             ("step_index", "<u1"),
             ("step_type", "<u1"),
-            ("_pad2", "V5"),
+            ("_pad3", "V5"),
             ("index", "<u4"),
-            ("_pad3", "V8"),
+            ("_pad4", "V8"),
             ("step_time_s", "<u8"),
             ("voltage_V", "<f4"),
             ("current_mA", "<f4"),
-            ("_pad4", "V16"),
+            ("_pad5", "V16"),
             ("capacity_mAh", "<f4"),
             ("energy_mWh", "<f4"),
             ("unix_time_s", "<u8"),
-            ("_pad5", "V12"),
+            ("_pad6", "V12"),
         ]
     )
-    assert data_dtype.names is not None  # noqa: S101
-    data_dtype_no_pad = data_dtype[[name for name in data_dtype.names if not name.startswith("_")]]
-    data_arr = arr[data_mask].view(data_dtype_no_pad)
-    data_arr = data_arr.flatten()
-    data_df = pl.DataFrame(data_arr)
-    data_df = data_df.with_columns(
+    return _mask_arr(arr, data_dtype, 85).with_columns(
         [
             pl.col("unix_time_s").cast(pl.Float64) / 1e6,  # us -> s
             (pl.col("step_time_s") / 1e6).cast(pl.Float32),  # us -> s
@@ -409,28 +372,9 @@ def _read_nda_130_90(mm: mmap.mmap) -> tuple[pl.DataFrame, pl.DataFrame]:
         ]
     )
 
-    aux_dtype = np.dtype(
-        [
-            ("_pad1", "V5"),
-            ("aux", "<u1"),
-            ("index", "<u4"),
-            ("_pad2", "V16"),
-            ("aux_voltage_volt", "<i4"),
-            ("_pad3", "V8"),
-            ("aux_temperature_degC", "<i2"),
-            ("_pad4", "V48"),
-        ]
-    )
-    assert aux_dtype.names is not None  # noqa: S101
-    aux_dtype_no_pad = aux_dtype[[name for name in aux_dtype.names if not name.startswith("_")]]
-    aux_arr = arr[aux_mask].view(aux_dtype_no_pad)
-    aux_arr = aux_arr.flatten()
-    aux_df = pl.DataFrame(aux_arr)
-    aux_df = aux_df.with_columns(
-        [
-            pl.col("aux_temperature_degC").cast(pl.Float32) / 10,  # 0.1'C -> 'C
-            pl.col("aux_voltage_volt").cast(pl.Float32) / 10000,  # 0.1 mV -> V
-        ]
-    )
 
-    return data_df, aux_df
+NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
+    8: _read_nda_8,
+    29: _read_nda_29,
+    130: _read_nda_130,
+}
