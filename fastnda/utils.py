@@ -29,6 +29,13 @@ def _generate_cycle_number(
     if len(df) == 0:
         return df
 
+    if df.select(pl.col("step_type").is_in({16, 17, 25}).any()).item():
+        logger.warning(
+            "Data contains Pulse, SIM, or Ramp steps. "
+            "This might give unexpected cycle numbers with 'chg' 'dchg' or 'auto' mode. "
+            "Consider using 'raw' cycle mode instead."
+        )
+
     # Auto: find the first non rest cycle
     if cycle_mode == "auto":
         cycle_mode = _id_first_state(df)

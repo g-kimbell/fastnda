@@ -31,6 +31,7 @@ STEP_TYPE_MAP = MappingProxyType(
     }
 )
 
+# For _generate_cycle_number, 1 = charge, 0 = discharge
 CHARGE_DISCHARGE_MAP = MappingProxyType(
     {
         1: 1,
@@ -40,7 +41,6 @@ CHARGE_DISCHARGE_MAP = MappingProxyType(
         8: 0,
         9: 1,
         10: 0,
-        17: 0,
         18: 1,
         19: 0,
         20: 0,
