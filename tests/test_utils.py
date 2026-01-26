@@ -98,3 +98,23 @@ class TestUtils:
             _generate_cycle_number(df, cycle_mode="auto")["cycle_count"],
             df["cycle_count"],
         )
+
+    def test_generate_cycle_number_warn_steps(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should warn user if Pulse, SIM, Ramp used for determining cycle."""
+        df = pl.DataFrame(
+            {"step_type": [4, 4, 4, 1, 1, 1, 17, 2, 2, 2, 16, 2, 2, 2, 2, 4, 4, 1, 1, 2, 2, 25, 2, 1, 1, 2, 2, 1, 2]}
+        )
+        assert_series_equal(
+            _generate_cycle_number(df, cycle_mode="auto")["cycle_count"],
+            _generate_cycle_number(df, cycle_mode="chg")["cycle_count"],
+        )
+        assert "Data contains Pulse, SIM, or Ramp steps" in caplog.text
+        caplog.clear()
+        _generate_cycle_number(pl.DataFrame({"step_type": [16, 1, 1, 2, 2]}), cycle_mode="auto")
+        assert "Data contains Pulse, SIM, or Ramp steps" in caplog.text
+        caplog.clear()
+        _generate_cycle_number(pl.DataFrame({"step_type": [1, 17, 1, 1, 2, 2]}), cycle_mode="chg")
+        assert "Data contains Pulse, SIM, or Ramp steps" in caplog.text
+        caplog.clear()
+        _generate_cycle_number(pl.DataFrame({"step_type": [1, 1, 1, 1, 25, 2, 2]}), cycle_mode="dchg")
+        assert "Data contains Pulse, SIM, or Ramp steps" in caplog.text

@@ -3,15 +3,11 @@
 import logging
 from typing import Literal
 
-import numpy as np
 import polars as pl
 
-from fastnda.dicts import STEP_TYPE_MAP
+from fastnda.dicts import CHARGE_DISCHARGE_MAP
 
 logger = logging.getLogger(__name__)
-
-charge_keys = [k for k, v in STEP_TYPE_MAP.items() if v.endswith("_Chg")]
-discharge_keys = [k for k, v in STEP_TYPE_MAP.items() if v.endswith("_DChg")]
 
 
 def _generate_cycle_number(
@@ -25,37 +21,39 @@ def _generate_cycle_number(
             'dchg': Cycle incremented by a discharge step following a charge.
             'auto': Identifies the first non-rest state as the incremental state.
     """
+    if cycle_mode not in {"chg", "dchg", "auto"}:
+        msg = "Cycle_Mode %s not recognized. Supported options are 'chg', 'dchg', and 'auto'."
+        raise KeyError(msg, cycle_mode)
+
     # Check if any df
     if len(df) == 0:
         return df
+
+    if df.select(pl.col("step_type").is_in({16, 17, 25}).any()).item():
+        logger.warning(
+            "Data contains Pulse, SIM, or Ramp steps. "
+            "This might give unexpected cycle numbers with 'chg' 'dchg' or 'auto' mode. "
+            "Consider using 'raw' cycle mode instead."
+        )
 
     # Auto: find the first non rest cycle
     if cycle_mode == "auto":
         cycle_mode = _id_first_state(df)
 
-    # Set increment key and non-increment/off key
-    if cycle_mode == "chg":
-        inkeys = charge_keys
-        offkeys = [*discharge_keys, 17]
-    elif cycle_mode == "dchg":
-        inkeys = discharge_keys
-        offkeys = [*charge_keys, 17]
-    else:
-        msg = "Cycle_Mode %s not recognized. Supported options are 'chg', 'dchg', and 'auto'."
-        raise KeyError(msg, cycle_mode)
-
-    incs = df["step_type"].is_in(inkeys).to_numpy()
-    flags = df["step_type"].is_in(offkeys).to_numpy()
-    cycles = np.zeros(len(df), dtype=np.uint32)
-    cycles[0] = np.uint32(1)
-    flag = False
-    for i in range(len(df)):
-        if not flag and flags[i]:
-            flag = True
-        elif flag and incs[i]:
-            flag = False
-            cycles[i] = np.uint32(1)
-    return df.with_columns(pl.Series(name="cycle_count", values=cycles, dtype=pl.UInt32).cum_sum())
+    # Increment when 0->1 (chg) or 1->0 (dchg)
+    target_diff = 1 if cycle_mode == "chg" else -1
+    return df.with_columns(
+        pl.col("step_type")
+        .replace_strict(CHARGE_DISCHARGE_MAP, default=None)
+        .forward_fill()
+        .diff()
+        .eq(target_diff)
+        .cum_sum()
+        .fill_null(0)
+        .add(1)
+        .cast(pl.UInt32)
+        .alias("cycle_count")
+    )
 
 
 def _count_changes(series: pl.Series) -> pl.Series:
@@ -66,7 +64,7 @@ def _count_changes(series: pl.Series) -> pl.Series:
 def _id_first_state(df: pl.DataFrame) -> Literal["chg", "dchg"]:
     """Identify the first non-rest state in the DataFrame."""
     # Filter on non-rest keys, check first row
-    filtered = df.filter(pl.col("step_type").is_in(charge_keys + discharge_keys)).head(1)
-    if not filtered.is_empty() and filtered[0, "step_type"] in charge_keys:
+    filtered = df.filter(pl.col("step_type").is_in(CHARGE_DISCHARGE_MAP)).head(1)
+    if not filtered.is_empty() and CHARGE_DISCHARGE_MAP[filtered[0, "step_type"]] == 1:
         return "chg"
     return "dchg"
