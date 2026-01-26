@@ -32,6 +32,10 @@ class TestMissing:
             f.write("this doesnt even have neware at the start")
         with pytest.raises(ValueError):
             read_nda_metadata(file)
+        with file.open("wb") as f:
+            f.write(b"NEWARE" + b"\x00" * 8 + b"\x82" + 1024 * b"\x00")
+        with pytest.raises(NotImplementedError, match="130 subversion"):
+            read_nda(file)
         with file.open("rb") as f:
             mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
         with pytest.raises(EOFError):
