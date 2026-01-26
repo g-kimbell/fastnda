@@ -189,6 +189,53 @@ def _read_nda_8(mm: mmap.mmap) -> pl.DataFrame:
     )
 
 
+def _read_nda_22(mm: mmap.mmap) -> pl.DataFrame:
+    """Read nda version 22."""
+    arr = _get_arr_from_nda(mm, b"\xaa\x00\x01\x00\x00\x00", 86)
+    data_dtype = np.dtype(
+        [
+            ("identifier", "<u1"),
+            ("_pad1", "V1"),
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u2"),
+            ("step_type", "<u1"),
+            ("step_count", "<u1"),
+            ("step_time_s", "<u8"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
+            ("_pad3", "V8"),
+            ("charge_capacity_mAh", "<i8"),
+            ("discharge_capacity_mAh", "<i8"),
+            ("charge_energy_mWh", "<i8"),
+            ("discharge_energy_mWh", "<i8"),
+            ("unix_time_s", "<u8"),
+            ("range", "<i4"),
+            ("_pad5", "V4"),
+        ]
+    )
+    mult_cols = ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"]
+    return (
+        _mask_arr(arr, data_dtype, 85)
+        .with_columns(
+            [
+                pl.col("cycle_count") + 1,
+                pl.col("step_time_s").cast(pl.Float32) / 1000,
+                pl.col("voltage_V").cast(pl.Float32) / 10000,
+                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
+                _count_changes(pl.col("step_count")).alias("step_count"),
+            ]
+        )
+        .with_columns(
+            [
+                pl.col("current_mA") * pl.col("multiplier"),
+                (pl.col(mult_cols).cast(pl.Float64) * pl.col("multiplier").cast(pl.Float64) / 3600).cast(pl.Float32),
+            ]
+        )
+        .drop(["multiplier", "range"])
+    )
+
+
 def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 29."""
     arr = _get_arr_from_nda(mm, b"\x55\x00\x01\x00\x00\x00", 86)
@@ -370,6 +417,8 @@ def _read_nda_130_90(mm: mmap.mmap) -> pl.DataFrame:
 
 NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
     8: _read_nda_8,
+    22: _read_nda_22,
+    26: _read_nda_29,
     29: _read_nda_29,
     130: _read_nda_130,
 }
