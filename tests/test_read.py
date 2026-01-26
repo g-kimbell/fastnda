@@ -63,6 +63,7 @@ class TestRead:
             "current_mA",
             "unix_time_s",
             "step_time_s",
+            "total_time_s",
             "cycle_count",
             "step_count",
             "step_index",
