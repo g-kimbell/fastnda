@@ -220,6 +220,7 @@ def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
             ("_pad5", "V4"),
         ]
     )
+    mult_cols = ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"]
     data_df = (
         _mask_arr(arr, data_dtype, 85)
         .with_columns(
@@ -237,13 +238,7 @@ def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
         .with_columns(
             [
                 pl.col("current_mA") * pl.col("multiplier"),
-                (
-                    pl.col(
-                        ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"],
-                    ).cast(pl.Float64)
-                    * pl.col("multiplier").cast(pl.Float64)
-                    / 3600
-                ).cast(pl.Float32),
+                (pl.col(mult_cols).cast(pl.Float64) * pl.col("multiplier").cast(pl.Float64) / 3600).cast(pl.Float32),
                 (pl.col("timestamp").cast(pl.Float64) * 1e-6).alias("unix_time_s"),
             ]
         )
