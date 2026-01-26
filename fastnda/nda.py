@@ -157,7 +157,7 @@ def _read_nda(mm: mmap.mmap) -> pl.DataFrame:
 
 
 def _read_nda_8(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 8, return data and aux DataFrames."""
+    """Read nda version 8."""
     # Identify the beginning of the data section - first byte 255 and index = 1
     arr = _get_arr_from_nda(mm, header=b"\xff\x01\x00\x00\x00", record_len=59)
     dtype = np.dtype(
@@ -190,7 +190,7 @@ def _read_nda_8(mm: mmap.mmap) -> pl.DataFrame:
 
 
 def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 29, return data and aux DataFrames."""
+    """Read nda version 29."""
     arr = _get_arr_from_nda(mm, b"\x55\x00\x01\x00\x00\x00", 86)
     data_dtype = np.dtype(
         [
@@ -283,7 +283,7 @@ def _read_nda_130(mm: mmap.mmap) -> pl.DataFrame:
 
 
 def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 130 BTS9.1, return data and aux DataFrames."""
+    """Read nda version 130 BTS9.1."""
     # Data starts at 1024, search forward for next identifier for record length
     record_len = mm.find(mm[1024:1026], 1026) - 1024
 
@@ -339,7 +339,7 @@ def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
 
 
 def _read_nda_130_90(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 130 BTS9.0, return data and aux DataFrames."""
+    """Read nda version 130 BTS9.0."""
     # Data start seems to be (18, 80, 0, 7, 85, 129, 1, 6)
     # Aux identifiers are (18, 80, 0, 7, 88, 129, 1, 6) and (18, 80, 0, 7, 89, 129, 1, 6)
     arr = _get_arr_from_nda(mm, header=b"\x12\x50\x00\x07\x55\x81\x01\x06", record_len=88)
