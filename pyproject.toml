@@ -18,6 +18,7 @@ classifiers = [
 description = "Read Neware nda and ndax files fast."
 dependencies = [
     "defusedxml>=0.7.1",
+    "isal; platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'aarch64'",
     "numpy>=2.2.6",
     "polars>=1.33.1",
     "tqdm>=4.67.1",

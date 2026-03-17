@@ -146,7 +146,7 @@ def _mask_arr(
     """Get polars dataframe from array."""
     assert dtype.names is not None  # noqa: S101
     dtype_no_pad = dtype[[name for name in dtype.names if not name.startswith("_")]]
-    arr = arr.view(dtype_no_pad).flatten()
+    arr = arr.view(dtype_no_pad).ravel()
     return pl.DataFrame(arr).filter(pl.col("identifier") == mask).drop("identifier")
 
 
