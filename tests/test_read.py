@@ -44,7 +44,9 @@ class TestRead:
         test_file = Path(__file__).parent / "test_data" / "nw4-120-1-6-53.ndax"
         df1 = fastnda.read(test_file, cycle_mode="raw")
         df2 = fastnda.read(test_file, cycle_mode="chg")
-        df1 = df1.with_columns(pl.col("step_type").replace_strict(REV_STEP_TYPE_MAP, return_dtype=pl.Int32))
+        df1 = df1.with_columns(
+            pl.col("step_type").cast(pl.Utf8).replace_strict(REV_STEP_TYPE_MAP, return_dtype=pl.Int32)
+        )
         df1 = _generate_cycle_number(df1, "chg")
         assert_series_equal(df1["cycle_count"], df2["cycle_count"])
 
@@ -124,7 +126,9 @@ class TestRead:
         df, df_ref = parsed_data
         # If the default is wrong, check if cycle_mode auto is correct
         if not (df["cycle_count"] == df_ref["Cycle Index"]).all():
-            df2 = df.with_columns(pl.col("step_type").replace_strict(REV_STEP_TYPE_MAP, return_dtype=pl.Int32))
+            df2 = df.with_columns(
+                pl.col("step_type").cast(pl.Utf8).replace_strict(REV_STEP_TYPE_MAP, return_dtype=pl.Int32)
+            )
             df2 = _generate_cycle_number(df2, "auto")
             assert_series_equal(
                 df2["cycle_count"],
