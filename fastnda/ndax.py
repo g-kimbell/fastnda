@@ -18,6 +18,16 @@ from fastnda.dicts import (
 )
 from fastnda.utils import _count_changes
 
+try:
+    import zlib
+
+    from isal import isal_zlib
+
+    zlib.decompress = isal_zlib.decompress
+    zlib.decompressobj = isal_zlib.decompressobj
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 
