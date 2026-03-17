@@ -25,8 +25,9 @@ try:
 
     zlib.decompress = isal_zlib.decompress
     zlib.decompressobj = isal_zlib.decompressobj
+    ISAL_AVAILABLE = True
 except ImportError:
-    pass
+    ISAL_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

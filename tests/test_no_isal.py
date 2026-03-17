@@ -1,8 +1,8 @@
 """Tests ndax reading without isal dependency."""
 
-import builtins
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -10,28 +10,33 @@ import fastnda
 
 
 @pytest.fixture
-def no_isal(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Simulate isal not installed."""
-    del_modules = ["isal"]
-    for module in del_modules:
-        if module in sys.modules:
-            monkeypatch.delitem(sys.modules, module)
+def fastnda_no_isal(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    """Simulate isal not being installed."""
+    # Remove fastnda + isal from cache
+    to_remove = [key for key in sys.modules if key in {"isal", "fastnda"} or key.startswith(("isal.", "fastnda."))]
+    for module in to_remove:
+        sys.modules.pop(module, None)
 
-    original_import = builtins.__import__
+    # Remove isal from sys.modules
+    monkeypatch.setitem(sys.modules, "isal", None)
+    monkeypatch.setitem(sys.modules, "isal.isal_zlib", None)
 
-    def _fake_import(module: str, *args, **kwargs):  # noqa: ANN002, ANN003, ANN202
-        """Intercept imports."""
-        if module in del_modules:
-            msg = f"No module named '{module}'"
-            raise ModuleNotFoundError(msg)
-        return original_import(module, *args, **kwargs)
+    # Fresh import fastnda
+    import fastnda  # noqa: PLC0415
+    import fastnda.ndax  # noqa: PLC0415
 
-    monkeypatch.setattr(builtins, "__import__", _fake_import)
+    return fastnda
 
 
-def test_read_no_isal(no_isal) -> None:  # noqa: ANN001, ARG001
-    """Test reading ndax files without isal, using zlib from stdlib."""
-    with pytest.raises(ModuleNotFoundError):
-        import isal  # noqa: F401, PLC0415
+def test_ndax_with_isal() -> None:
+    """Test isal dependency works is being used."""
     test_file = Path(__file__).parent / "test_data" / "nw4-120-1-6-53.ndax"
     fastnda.read(test_file)
+    assert fastnda.ndax.ISAL_AVAILABLE
+
+
+def test_ndax_no_isal(fastnda_no_isal: ModuleType) -> None:
+    """Test importing and reading file without isal dependency."""
+    test_file = Path(__file__).parent / "test_data" / "nw4-120-1-6-53.ndax"
+    fastnda_no_isal.read(test_file)
+    assert not fastnda_no_isal.ndax.ISAL_AVAILABLE
