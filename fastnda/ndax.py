@@ -770,35 +770,34 @@ def _bytes_to_df(
     """
     # Read entire file into 1 byte array nrecords x record_size
     num_records = len(buf) // record_size - file_header_records
-    arr = np.frombuffer(buf[record_size * file_header_records :], dtype=np.uint8).reshape((num_records, record_size))
+    arr = np.frombuffer(
+        buf,
+        dtype=np.uint8,
+        offset=record_size * file_header_records,
+    ).reshape((num_records, record_size))
     rows_per_record = (record_size - data_start_ind - record_end_pad) // dtype.itemsize
 
-    # Slice and unpack the bitmask
     if use_bitmask:
         bitmask_start = 4
         bits_in_bitmask = int(np.ceil(rows_per_record / 8))
         bitmask = arr[:, bitmask_start : bitmask_start + bits_in_bitmask]
-        bitmask = np.unpackbits(bitmask, bitorder="little", axis=1).astype(bool)[:, :rows_per_record].flatten()
-
-    # Slice the data
-    data_end_ind = data_start_ind + dtype.itemsize * rows_per_record
-    arr = arr[:, data_start_ind:data_end_ind]
+        bitmask = np.unpackbits(bitmask, bitorder="little", axis=1)[:, :rows_per_record].ravel()
 
     # Remove padding columns
     useful_cols = [name for name in dtype.names if not name.startswith("_")]
     dtype_no_pad = dtype[useful_cols]
-    arr = arr.view(dtype=dtype_no_pad)
 
-    # Flatten
-    arr = arr.flatten()
+    # Slice the data
+    data_end_ind = data_start_ind + dtype.itemsize * rows_per_record
+    data = np.ascontiguousarray(arr[:, data_start_ind:data_end_ind]).view(dtype_no_pad).ravel()
 
-    if not use_bitmask:  # It should have an index column, filter where 0
-        return pl.DataFrame(arr).filter(pl.col("index") != 0)
+    df = pl.DataFrame(data)
 
-    df = pl.DataFrame(arr)
+    if not use_bitmask:
+        return df.filter(pl.col("index") != 0)
     if add_index:
         df = df.with_columns(pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("index"))
-    return df.filter(bitmask)
+    return df.filter(pl.Series(bitmask).ne(0))
 
 
 # Map NDC (version, filetype) to handler functions
