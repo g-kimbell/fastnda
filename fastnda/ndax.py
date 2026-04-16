@@ -9,7 +9,6 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
-import xmltodict
 from defusedxml import ElementTree
 
 from fastnda.dicts import (
@@ -88,6 +87,8 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
 
 def read_ndax_metadata(file: str | Path) -> dict[str, str | float]:
     """Read metadata from VersionInfo.xml and Step.xml in a Neware .ndax file."""
+    import xmltodict
+
     metadata = {}
     with zipfile.ZipFile(str(file)) as zf:
         xml_files = [f for f in zf.namelist() if f.endswith(".xml")]
