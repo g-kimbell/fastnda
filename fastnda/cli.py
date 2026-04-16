@@ -7,9 +7,6 @@ from typing import Annotated, Literal, cast, get_args
 from zipfile import BadZipFile
 
 import typer
-from tqdm import tqdm
-
-import fastnda
 
 LOGGER = logging.getLogger(__name__)
 
@@ -97,15 +94,6 @@ def _require_tables() -> None:
         raise RuntimeError(msg) from e
 
 
-class TqdmHandler(logging.Handler):
-    """Class to handle logs while using tqdm progress bar."""
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """Write log to console."""
-        msg = self.format(record)
-        tqdm.write(msg)
-
-
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -128,10 +116,6 @@ def main(
     root.setLevel(log_level)
     root.handlers.clear()
     ctx.obj = {"verbosity": verbosity}
-
-    handler = TqdmHandler()
-    handler.setFormatter(logging.Formatter("%(name)s:%(levelname)s: %(message)s"))
-    root.addHandler(handler)
 
 
 @app.command()
@@ -206,6 +190,20 @@ def batch_convert(
         raw_categories: Return `step_type` column as integer codes.
 
     """
+    from tqdm import tqdm  # noqa: PLC0415
+
+    class TqdmHandler(logging.Handler):
+        """Class to handle logs while using tqdm progress bar."""
+
+        def emit(self, record: logging.LogRecord) -> None:
+            """Write log to console."""
+            msg = self.format(record)
+            tqdm.write(msg)
+
+    handler = TqdmHandler()
+    handler.setFormatter(logging.Formatter("%(name)s:%(levelname)s: %(message)s"))
+    root = logging.getLogger()
+    root.addHandler(handler)
     if file_format in {"h5", "hdf5"}:
         _require_pandas()
         _require_tables()
@@ -262,7 +260,9 @@ def _convert_with_type(
     pandas: bool,
     raw_categories: bool,
 ) -> None:
-    df = fastnda.read(
+    from fastnda.main import read
+
+    df = read(
         in_file,
         cycle_mode=cycle_mode,
         columns=columns,
@@ -289,7 +289,9 @@ def _convert_with_type(
 @app.command()
 def print_metadata(in_file: InFileArgument, indent: int | None = 4) -> None:
     """Print file metadata to terminal."""
-    typer.echo(json.dumps(fastnda.read_metadata(in_file), indent=indent))
+    from fastnda.main import read_metadata
+
+    typer.echo(json.dumps(read_metadata(in_file), indent=indent))
 
 
 @app.command()
@@ -299,7 +301,13 @@ def convert_metadata(
     indent: int | None = 4,
 ) -> None:
     """Convert .nda / .ndax metadata to json."""
+    from fastnda.main import read_metadata
+
     if out_file is None:
         out_file = in_file.with_suffix(".json")
     with out_file.open("w") as f:
-        json.dump(fastnda.read_metadata(in_file), f, indent=indent)
+        json.dump(read_metadata(in_file), f, indent=indent)
+
+
+if __name__ == "__main__":
+    app()
