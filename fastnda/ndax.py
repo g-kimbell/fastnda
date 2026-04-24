@@ -80,7 +80,10 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
                 aux_df = aux_df.rename({"?": f"aux{aux_id}_{col}"})
             else:  # Otherwise just append aux ID to column names
                 aux_df = aux_df.rename({col: f"aux{aux_id}_{col}" for col in aux_df.columns if col not in ["index"]})
-            df = df.join(aux_df, how="left", on="index")
+            if len(df) == len(aux_df):
+                df = pl.concat([df, aux_df.drop("index")], how="horizontal")
+            else:
+                df = df.join(aux_df, how="left", on="index")
 
     return df
 
