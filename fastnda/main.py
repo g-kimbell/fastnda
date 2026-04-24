@@ -1,12 +1,13 @@
 """Main module for reading Neware NDA and NDAX files."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
-import polars as pl
-
-from fastnda.dicts import DTYPE_MAP, STEP_TYPE_MAP
+if TYPE_CHECKING:
+    import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,8 @@ def read(
         from fastnda.utils import _generate_cycle_number
 
         df = _generate_cycle_number(df, cycle_mode)
+    import polars as pl
+    from fastnda.dicts import DTYPE_MAP, STEP_TYPE_MAP
 
     if "total_time_s" not in df.columns:
         max_df = (
