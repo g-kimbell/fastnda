@@ -12,7 +12,7 @@ from polars.testing import assert_series_equal
 
 import fastnda
 from fastnda.dicts import STEP_TYPE_MAP
-from fastnda.main import _generate_cycle_number
+from fastnda.utils import _generate_cycle_number
 
 
 @pytest.fixture(scope="module")
