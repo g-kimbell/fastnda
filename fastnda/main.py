@@ -1,16 +1,13 @@
 """Main module for reading Neware NDA and NDAX files."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
-import polars as pl
-
-from fastnda.dicts import DTYPE_MAP, STEP_TYPE_MAP
-from fastnda.formats import to_bdf
-from fastnda.nda import read_nda, read_nda_metadata
-from fastnda.ndax import read_ndax, read_ndax_metadata
-from fastnda.utils import _generate_cycle_number
+if TYPE_CHECKING:
+    import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +40,12 @@ def read(
     # Read file and generate DataFrame
     file = Path(file)
     if file.suffix == ".nda":
+        from fastnda.nda import read_nda
+
         df = read_nda(file)
     elif file.suffix == ".ndax":
+        from fastnda.ndax import read_ndax
+
         df = read_ndax(file)
     else:
         msg = "File type not supported!"
@@ -56,7 +57,11 @@ def read(
         cycle_mode = "auto"
     if cycle_mode in {"chg", "dchg", "auto"}:
         cycle_mode = cast("Literal['chg', 'dchg', 'auto']", cycle_mode)
+        from fastnda.utils import _generate_cycle_number
+
         df = _generate_cycle_number(df, cycle_mode)
+    import polars as pl
+    from fastnda.dicts import DTYPE_MAP, STEP_TYPE_MAP
 
     if "total_time_s" not in df.columns:
         max_df = (
@@ -98,6 +103,8 @@ def read(
     df = df.select(non_aux_columns + aux_columns)
 
     if columns == "bdf":
+        from fastnda.formats import to_bdf
+
         return to_bdf(df)
     return df
 
@@ -114,8 +121,12 @@ def read_metadata(file: str | Path) -> dict[str, str | float]:
     """
     file = Path(file)
     if file.suffix == ".nda":
+        from fastnda.nda import read_nda_metadata
+
         return read_nda_metadata(file)
     if file.suffix == ".ndax":
+        from fastnda.ndax import read_ndax_metadata
+
         return read_ndax_metadata(file)
     msg = "File type not supported!"
     raise ValueError(msg)
