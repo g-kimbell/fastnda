@@ -595,7 +595,7 @@ def _read_ndc_14_filetype_18(buf: bytes) -> pl.DataFrame:
                 pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
                 * 1000,  # Ah|Wh -> mAh|mWh
                 (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
-                pl.col("step_count").diff().fill_null(1).abs().gt(0).cum_sum().alias("step_count"),
+                _count_changes(pl.col("step_count")).alias("step_count"),
             ]
         )
         .drop("uts_ms")
@@ -690,6 +690,7 @@ def _read_ndc_16_filetype_18(buf: bytes) -> pl.DataFrame:
                     / 3600
                 ).cast(pl.Float32),  # mAs|mWs -> mAh|mWh
                 (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
+                _count_changes(pl.col("step_count")).alias("step_count"),
             ]
         )
         .drop("uts_ms")
@@ -749,6 +750,7 @@ def _read_ndc_17_filetype_18(buf: bytes) -> pl.DataFrame:
                     * 1000
                 ).cast(pl.Float32),  # Ah|Wh -> mAh|mWh
                 (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
+                _count_changes(pl.col("step_count")).alias("step_count"),
             ]
         )
         .drop("uts_ms")
