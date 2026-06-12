@@ -326,7 +326,7 @@ class TestRead:
         assert "test_time_second" in df_bdf.columns
         assert "cycle_count" in df_bdf.columns
         assert "step_count" in df_bdf.columns
-        assert "step_index" in df_bdf.columns
+        assert "step_id" in df_bdf.columns
         assert "step_type" in df_bdf.columns
         assert "step_net_capacity_ah" in df_bdf.columns
         assert "step_net_energy_wh" in df_bdf.columns

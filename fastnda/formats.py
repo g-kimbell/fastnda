@@ -15,7 +15,7 @@ BDF_COL_MAP: Mapping[str, str] = MappingProxyType(
         "total_time_s": "test_time_second",
         "cycle_count": "cycle_count",
         "step_count": "step_count",
-        "step_index": "step_index",
+        "step_index": "step_id",
         "step_type": "step_type",
         "capacity_mAh": "step_net_capacity_ah",
         "energy_mWh": "step_net_energy_wh",
