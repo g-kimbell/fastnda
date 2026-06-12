@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def read(
     file: str | Path,
     cycle_mode: Literal["chg", "dchg", "auto", "raw"] = "chg",
-    columns: Literal["default", "bdf"] = "default",
+    columns: Literal["default", "bdf", "bdf-pref"] = "default",
     *,
     raw_categories: bool = False,
 ) -> pl.DataFrame:
@@ -30,7 +30,14 @@ def read(
             'raw': Leaves cycles as it is found in the Neware file.
         columns: Selects how to format the output columns
             'default': fastnda columns, e.g. 'voltage_V', 'current_mA'
-            'bdf': battery-data-format columns, e.g. 'voltage_volt', 'current_ampere'
+            'bdf': battery-data-format columns 'machine-readable' columns
+                e.g. 'voltage_volt', 'current_ampere'
+                battery-data-format is still in development, these column names
+                may change without a major version bump
+            'bdf-pref': battery-data-format 'preferred label' columns
+                e.g. 'Voltage / V', 'Current / A'
+                battery-data-format is still in development, these column names
+                may change without a major version bump
         raw_categories: Return `step_type` column as integer codes.
 
     Returns:
@@ -102,10 +109,18 @@ def read(
     aux_columns = [name for name in df.columns if name.startswith("aux")]
     df = df.select(non_aux_columns + aux_columns)
 
+    # Output with desired column-style
+    if columns == "default":
+        return df
     if columns == "bdf":
         from fastnda.formats import to_bdf
 
         return to_bdf(df)
+    if columns == "bdf-pref":
+        from fastnda.formats import to_bdf_pref
+
+        return to_bdf_pref(df)
+    logger.warning("Column type %s not understood, using default.", columns)
     return df
 
 

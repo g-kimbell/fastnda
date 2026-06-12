@@ -8,7 +8,7 @@ from zipfile import ZipFile
 
 import polars as pl
 import pytest
-from polars.testing import assert_series_equal
+from polars.testing import assert_frame_equal, assert_series_equal
 
 import fastnda
 from fastnda.dicts import STEP_TYPE_MAP
@@ -39,9 +39,8 @@ REV_STEP_TYPE_MAP = {v: k for k, v in STEP_TYPE_MAP.items()}
 class TestRead:
     """Compared parsed data to reference from BTSDA."""
 
-    def test_generate_cycle_number(self) -> None:
+    def test_generate_cycle_number(self, test_file: Path) -> None:
         """Test generating cycle numbers on just one file."""
-        test_file = Path(__file__).parent / "test_data" / "nw4-120-1-6-53.ndax"
         df1 = fastnda.read(test_file, cycle_mode="raw")
         df2 = fastnda.read(test_file, cycle_mode="chg")
         df1 = df1.with_columns(
@@ -306,7 +305,7 @@ class TestRead:
                 raise ValueError(msg)
 
     def test_bdf(self, parsed_data: tuple, file_pair: tuple[Path, Path]) -> None:
-        """Basic checks for metadata reading."""
+        """Test bdf column conversion."""
         df, df_ref = parsed_data
         test_file = file_pair[0]
         if test_file.suffix == ".zip":
@@ -314,9 +313,9 @@ class TestRead:
                 # unzip file to a temp location and read
                 zip_test.extractall(tmp_dir)
                 test_file = Path(tmp_dir) / test_file.stem
-                df_bdf = fastnda.read(test_file, columns="bdf")
+                df_bdf = fastnda.read(test_file, columns="bdf", cycle_mode="raw")
         else:
-            df_bdf = fastnda.read(test_file, columns="bdf")
+            df_bdf = fastnda.read(test_file, columns="bdf", cycle_mode="raw")
 
         assert "record_index" in df_bdf.columns
         assert "voltage_volt" in df_bdf.columns
@@ -326,14 +325,23 @@ class TestRead:
         assert "test_time_second" in df_bdf.columns
         assert "cycle_count" in df_bdf.columns
         assert "step_count" in df_bdf.columns
-        assert "step_index" in df_bdf.columns
+        assert "step_id" in df_bdf.columns
         assert "step_type" in df_bdf.columns
-        assert "step_capacity_ah" in df_bdf.columns
-        assert "step_energy_wh" in df_bdf.columns
+        assert "step_net_capacity_ah" in df_bdf.columns
+        assert "step_net_energy_wh" in df_bdf.columns
 
+        assert_series_equal(df["index"], df_bdf["record_index"], check_names=False)
+        assert_series_equal(df["voltage_V"], df_bdf["voltage_volt"], check_names=False)
         assert_series_equal(df["current_mA"], df_bdf["current_ampere"] * 1e3, check_names=False)
-        assert_series_equal(df["capacity_mAh"], df_bdf["step_capacity_ah"] * 1e3, check_names=False)
-        assert_series_equal(df["energy_mWh"], df_bdf["step_energy_wh"] * 1e3, check_names=False)
+        assert_series_equal(df["unix_time_s"], df_bdf["unix_time_second"], check_names=False)
+        assert_series_equal(df["step_time_s"], df_bdf["step_time_second"], check_names=False)
+        assert_series_equal(df["total_time_s"], df_bdf["test_time_second"], check_names=False)
+        assert_series_equal(df["cycle_count"], df_bdf["cycle_count"], check_names=False)
+        assert_series_equal(df["step_count"], df_bdf["step_count"], check_names=False)
+        assert_series_equal(df["step_index"], df_bdf["step_id"], check_names=False)
+        assert_series_equal(df["step_type"], df_bdf["step_type"], check_names=False)
+        assert_series_equal(df["capacity_mAh"], df_bdf["step_net_capacity_ah"] * 1e3, check_names=False)
+        assert_series_equal(df["energy_mWh"], df_bdf["step_net_energy_wh"] * 1e3, check_names=False)
 
         # Checking correct order of magnitude, more precise value checks in other tests
         assert_series_equal(
@@ -343,3 +351,49 @@ class TestRead:
             check_names=False,
             check_dtypes=False,
         )
+
+    def test_bdf_pref(self, parsed_data: tuple, file_pair: tuple[Path, Path]) -> None:
+        """Test bdf preferred column conversion."""
+        df, df_ref = parsed_data
+        test_file = file_pair[0]
+        if test_file.suffix == ".zip":
+            with TemporaryDirectory() as tmp_dir, ZipFile(test_file, "r") as zip_test:
+                # unzip file to a temp location and read
+                zip_test.extractall(tmp_dir)
+                test_file = Path(tmp_dir) / test_file.stem
+                df_bdf = fastnda.read(test_file, columns="bdf-pref")
+        else:
+            df_bdf = fastnda.read(test_file, columns="bdf-pref")
+
+        assert "Record Index / 1" in df_bdf.columns
+        assert "Voltage / V" in df_bdf.columns
+        assert "Current / A" in df_bdf.columns
+        assert "Unix Time / s" in df_bdf.columns
+        assert "Step Time / s" in df_bdf.columns
+        assert "Test Time / s" in df_bdf.columns
+        assert "Cycle Count / 1" in df_bdf.columns
+        assert "Step Count / 1" in df_bdf.columns
+        assert "Step ID" in df_bdf.columns
+        assert "Step Type" in df_bdf.columns
+        assert "Step Net Capacity / Ah" in df_bdf.columns
+        assert "Step Net Energy / Wh" in df_bdf.columns
+
+        assert_series_equal(df["current_mA"], df_bdf["Current / A"] * 1e3, check_names=False)
+        assert_series_equal(df["capacity_mAh"], df_bdf["Step Net Capacity / Ah"] * 1e3, check_names=False)
+        assert_series_equal(df["energy_mWh"], df_bdf["Step Net Energy / Wh"] * 1e3, check_names=False)
+
+        # Checking correct order of magnitude, more precise value checks in other tests
+        assert_series_equal(
+            df_bdf["Current / A"],
+            df_ref["Current(uA)"] * 1e-6,
+            abs_tol=5e-5,
+            check_names=False,
+            check_dtypes=False,
+        )
+
+    def test_bad_column_input(self, test_file: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """Test bad columns input to read."""
+        df1 = fastnda.read(test_file, columns="something-wrong")
+        df2 = fastnda.read(test_file, columns="default")
+        assert_frame_equal(df1, df2)
+        assert "not understood" in caplog.text
