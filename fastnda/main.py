@@ -31,6 +31,8 @@ def read(
         columns: Selects how to format the output columns
             'default': fastnda columns, e.g. 'voltage_V', 'current_mA'
             'bdf': battery-data-format columns, e.g. 'voltage_volt', 'current_ampere'
+                battery-data-format is still in development, these column names
+                may change without a major version bump
         raw_categories: Return `step_type` column as integer codes.
 
     Returns:
