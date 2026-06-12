@@ -49,7 +49,7 @@ PandasOption = Annotated[
     ),
 ]
 ColumnsOption = Annotated[
-    Literal["default", "bdf"],
+    Literal["default", "bdf", "bdf-pref"],
     typer.Option(
         "--columns",
         "-c",
@@ -142,7 +142,14 @@ def convert(
             'raw': Leaves cycles as it is found in the Neware file
         columns: Selects how to format the output columns
             'default': fastnda columns, e.g. 'voltage_V', 'current_mA'
-            'bdf': battery-data-format columns, e.g. 'voltage_volt', 'current_ampere'
+            'bdf': battery-data-format columns 'machine-readable' columns
+                e.g. 'voltage_volt', 'current_ampere'
+                battery-data-format is still in development, these column names
+                may change without a major version bump
+            'bdf-pref': battery-data-format 'preferred label' columns
+                e.g. 'Voltage / V', 'Current / A'
+                battery-data-format is still in development, these column names
+                may change without a major version bump
         pandas: Whether to save in old pandas-safe format
         raw_categories: Return `step_type` column as integer codes.
 
@@ -184,7 +191,14 @@ def batch_convert(
             'raw': Leaves cycles as it is found in the Neware file
         columns: Selects how to format the output columns
             'default': fastnda columns, e.g. 'voltage_V', 'current_mA'
-            'bdf': battery-data-format columns, e.g. 'voltage_volt', 'current_ampere'
+            'bdf': battery-data-format columns 'machine-readable' columns
+                e.g. 'voltage_volt', 'current_ampere'
+                battery-data-format is still in development, these column names
+                may change without a major version bump
+            'bdf-pref': battery-data-format 'preferred label' columns
+                e.g. 'Voltage / V', 'Current / A'
+                battery-data-format is still in development, these column names
+                may change without a major version bump
         recursive: Whether to search recursively in subfolders
         pandas: Whether to save in old pandas-safe format
         raw_categories: Return `step_type` column as integer codes.
