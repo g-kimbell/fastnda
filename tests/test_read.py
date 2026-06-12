@@ -328,12 +328,12 @@ class TestRead:
         assert "step_count" in df_bdf.columns
         assert "step_index" in df_bdf.columns
         assert "step_type" in df_bdf.columns
-        assert "step_capacity_ah" in df_bdf.columns
-        assert "step_energy_wh" in df_bdf.columns
+        assert "step_net_capacity_ah" in df_bdf.columns
+        assert "step_net_energy_wh" in df_bdf.columns
 
         assert_series_equal(df["current_mA"], df_bdf["current_ampere"] * 1e3, check_names=False)
-        assert_series_equal(df["capacity_mAh"], df_bdf["step_capacity_ah"] * 1e3, check_names=False)
-        assert_series_equal(df["energy_mWh"], df_bdf["step_energy_wh"] * 1e3, check_names=False)
+        assert_series_equal(df["capacity_mAh"], df_bdf["step_net_capacity_ah"] * 1e3, check_names=False)
+        assert_series_equal(df["energy_mWh"], df_bdf["step_net_energy_wh"] * 1e3, check_names=False)
 
         # Checking correct order of magnitude, more precise value checks in other tests
         assert_series_equal(

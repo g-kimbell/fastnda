@@ -17,16 +17,16 @@ BDF_COL_MAP: Mapping[str, str] = MappingProxyType(
         "step_count": "step_count",
         "step_index": "step_index",
         "step_type": "step_type",
-        "capacity_mAh": "step_capacity_ah",
-        "energy_mWh": "step_energy_wh",
+        "capacity_mAh": "step_net_capacity_ah",
+        "energy_mWh": "step_net_energy_wh",
     }
 )
 
 BDF_MULTIPLIER_MAP: Mapping[str, float] = MappingProxyType(
     {
         "current_ampere": 1e-3,
-        "step_capacity_ah": 1e-3,
-        "step_energy_wh": 1e-3,
+        "step_net_capacity_ah": 1e-3,
+        "step_net_energy_wh": 1e-3,
     }
 )
 
