@@ -74,3 +74,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 def file_pair(request: pytest.FixtureRequest) -> tuple:
     """Return one file_pair from the request as a fixture."""
     return request.param
+
+
+@pytest.fixture
+def test_file() -> Path:
+    """Return a single .ndax file, for tests that do not need depend on file internals."""
+    return Path(__file__).parent / "test_data" / "nw4-120-1-6-53.ndax"

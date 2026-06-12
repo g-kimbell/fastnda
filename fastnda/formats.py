@@ -30,9 +30,26 @@ BDF_MULTIPLIER_MAP: Mapping[str, float] = MappingProxyType(
     }
 )
 
+BDF_PREF_LABEL_MAP: Mapping[str, str] = MappingProxyType(
+    {
+        "record_index": "Record Index / 1",
+        "voltage_volt": "Voltage / V",
+        "current_ampere": "Current / A",
+        "unix_time_second": "Unix Time / s",
+        "step_time_second": "Step Time / s",
+        "test_time_second": "Test Time / s",
+        "cycle_count": "Cycle Count / 1",
+        "step_count": "Step Count / 1",
+        "step_id": "Step ID",
+        "step_type": "Step Type",
+        "step_net_capacity_ah": "Step Net Capacity / Ah",
+        "step_net_energy_wh": "Step Net Energy / Wh",
+    }
+)
+
 
 def to_bdf(df: pl.DataFrame) -> pl.DataFrame:
-    """Convert fastnda dataframe to bdf."""
+    """Convert fastnda columnds to BDF machine readable columns."""
     df = df.rename(BDF_COL_MAP)
 
     # Dynamically rename any aux columns
@@ -46,3 +63,8 @@ def to_bdf(df: pl.DataFrame) -> pl.DataFrame:
         df = df.rename(rename_map)
 
     return df.with_columns(pl.col(k) * v for k, v in BDF_MULTIPLIER_MAP.items())
+
+
+def to_bdf_pref(df: pl.DataFrame) -> pl.DataFrame:
+    """Convert fastnda columnds to BDF preferred label columns."""
+    return to_bdf(df).rename(BDF_PREF_LABEL_MAP)
