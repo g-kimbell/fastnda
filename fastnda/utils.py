@@ -56,7 +56,7 @@ def _generate_cycle_number(
     )
 
 
-def _count_changes(series: pl.Series) -> pl.Series:
+def _count_changes(series: pl.Expr) -> pl.Expr:
     """Enumerate the number of value changes in a series."""
     return series.diff().fill_null(1).abs().gt(0).cum_sum()
 
