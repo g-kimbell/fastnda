@@ -16,6 +16,8 @@ class TestMetaData:
         """Basic checks for metadata reading."""
         test_file = file_pair[0]
         is_ndax = test_file.suffix == ".ndax"
+        if "nometa" in test_file.stem:
+            pytest.skip(f"Explicitly no metadata in {test_file.stem}")
 
         if test_file.suffix == ".zip":
             with TemporaryDirectory() as tmp_dir, ZipFile(test_file, "r") as zip_test:
