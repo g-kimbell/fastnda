@@ -150,14 +150,23 @@ class TestRead:
         df, df_ref = parsed_data
         if len(df) == 0 and len(df_ref) == 0:
             return
-        max_abs_diff = (df["step_time_s"] - df_ref["Time"]).abs().max()
-        if max_abs_diff > 5e-7:
-            # Maybe the test data has bad precision
-            if max_abs_diff < 0.01:
-                warnings.warn(f"Step time only matches within {max_abs_diff:.2e} s", stacklevel=2)
-            else:
-                msg = f"Step time columns differ by up to {max_abs_diff:.2e}"
+        diff = (df["step_time_s"] - df_ref["Time"]).abs()
+        max_diff = None
+        # BTSDA exported step time changes precision over time
+        thresholds = [
+            ((1e7, 1e8), 10.1),
+            ((1e6, 1e7), 1.01),
+            ((1800, 1e6), 0.101),
+            ((0, 1800), 0.0101),
+        ]
+        for (time_min, time_max), threshold in thresholds:
+            max_diff = diff.filter((df_ref["Time"] > time_min) & (df_ref["Time"] < time_max)).max()
+            if max_diff is not None and max_diff > threshold:
+                msg = f"Step time columns differ by up to {max_diff:.2e}"
                 raise ValueError(msg)
+        # Check earliest time diff, warn if over 1 us
+        if max_diff is not None and max_diff > 5e-7:
+            warnings.warn(f"Step time only matches within {max_diff:.2e} s", stacklevel=2)
 
     def test_total_time(self, parsed_data: tuple) -> None:
         """Total time should agree within 1 us."""
@@ -166,7 +175,7 @@ class TestRead:
             return
         diff = (df["total_time_s"] - df_ref["Total Time"]).abs()
         max_diff = None
-        # BTSDA exported Total time changes precision over time
+        # BTSDA exported total time changes precision over time
         thresholds = [
             ((1e7, 1e8), 10.1),
             ((1e6, 1e7), 1.01),
