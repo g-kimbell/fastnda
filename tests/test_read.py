@@ -1,7 +1,9 @@
 """Test read functionality."""
 
+import importlib
 import re
 import warnings
+from collections.abc import Callable, Generator
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
@@ -11,6 +13,7 @@ import pytest
 from polars.testing import assert_frame_equal, assert_series_equal
 
 import fastnda
+import fastnda.nda as _nda_module
 from fastnda.dicts import STEP_TYPE_MAP
 from fastnda.utils import _generate_cycle_number
 
@@ -406,3 +409,45 @@ class TestRead:
         df2 = fastnda.read(test_file, columns="default")
         assert_frame_equal(df1, df2)
         assert "not understood" in caplog.text
+
+
+def _instrument_reader_dict(module_name: str, dict_attr: str) -> Generator[set[str], None, None]:
+    """Wrap every entry of module_name.dict_attr to record which reader functions get called."""
+    module = importlib.import_module(module_name)
+    reader_dict: dict = getattr(module, dict_attr)
+    called: set[str] = set()
+    original = dict(reader_dict)
+    for key, reader in original.items():
+        if reader is None:
+            continue
+        reader_name = reader.__name__
+
+        def wrapper(*args: object, _reader: Callable = reader, _name: str = reader_name) -> object:
+            called.add(_name)
+            return _reader(*args)
+
+        reader_dict[key] = wrapper
+    try:
+        yield called
+    finally:
+        reader_dict.clear()
+        reader_dict.update(original)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def nda_reader_call_tracker() -> Generator[set[str], None, None]:
+    """Track which fastnda.nda reader functions get called by real data in this module."""
+    yield from _instrument_reader_dict("fastnda.nda", "NDA_READERS")
+
+
+_DISTINCT_NDA_READER_NAMES = sorted({r.__name__ for r in _nda_module.NDA_READERS.values() if r is not None})
+
+
+class TestNdaVersionCoverage:
+    """Track which NDA reader functions are tested with real data."""
+
+    @pytest.mark.parametrize("reader_name", _DISTINCT_NDA_READER_NAMES)
+    def test_reader_called_with_real_data(self, reader_name: str, nda_reader_call_tracker: set[str]) -> None:
+        """Confirm this reader function was actually invoked by TestRead's real-data reads."""
+        if reader_name not in nda_reader_call_tracker:
+            pytest.xfail(f"{reader_name} was never tested with a real data file.")

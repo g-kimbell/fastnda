@@ -71,6 +71,9 @@ fix = true
     "PT011", # allow just checking for ValueError without match
 ]
 
+[tool.pytest.ini_options]
+addopts = "-rxX"
+
 [tool.bumpver]
 current_version = "v1.2.0"
 version_pattern = "vMAJOR.MINOR.PATCH[PYTAGNUM]"
