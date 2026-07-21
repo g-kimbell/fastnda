@@ -138,16 +138,35 @@ def _get_arr_from_nda(
     return np.frombuffer(mm[header_idx:end], dtype=np.uint8).reshape((num_records, record_len))
 
 
+def _view_arr(
+    arr: np.ndarray,
+    dtype: np.dtype,
+) -> pl.DataFrame:
+    """Get polars dataframe from array, dropping padding columns."""
+    assert dtype.names is not None  # noqa: S101
+    dtype_no_pad = dtype[[name for name in dtype.names if not name.startswith("_")]]
+    arr = arr.view(dtype_no_pad).ravel()
+    return pl.DataFrame(arr)
+
+
 def _mask_arr(
     arr: np.ndarray,
     dtype: np.dtype,
     mask: int,
 ) -> pl.DataFrame:
-    """Get polars dataframe from array."""
-    assert dtype.names is not None  # noqa: S101
-    dtype_no_pad = dtype[[name for name in dtype.names if not name.startswith("_")]]
-    arr = arr.view(dtype_no_pad).ravel()
-    return pl.DataFrame(arr).filter(pl.col("identifier") == mask).drop("identifier")
+    """Get polars dataframe from array, filtered on an identifier value."""
+    return _view_arr(arr, dtype).filter(pl.col("identifier") == mask).drop("identifier")
+
+
+def _nda_head_main_begin(mm: mmap.mmap, *, pos_offset: int = 32, pos64: bool = False) -> int:
+    """Read the data start offset from the header.
+
+    File versions 1-11, 25, 27, store nBegin, nLen at a fixed offset.
+    File versions 12-29 except 25,27 use a different fixed offset.
+    File versions 129-130 use 64-bit pairs instead.
+    """
+    size = 8 if pos64 else 4
+    return int.from_bytes(mm[pos_offset : pos_offset + size], "little")
 
 
 def _merge_aux(
@@ -178,8 +197,117 @@ def _read_nda(mm: mmap.mmap) -> pl.DataFrame:
     return reader(mm)
 
 
+def _read_nda_1(mm: mmap.mmap) -> pl.DataFrame:
+    """Read nda version 1."""
+    header_idx = _nda_head_main_begin(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=38)
+    dtype = np.dtype(
+        [
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u1"),
+            ("step_type", "<u1"),
+            ("step_time_s", "<u4"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
+            ("_pad1", "V8"),  # nIR, iTemp - unpopulated in all files checked
+            ("capacity_mAh", "<i8"),
+        ]
+    )
+    return (
+        _view_arr(arr, dtype)
+        .filter(pl.col("index") != 0)
+        .with_columns(
+            [
+                pl.col("cycle_count") + 1,
+                pl.col("step_time_s").cast(pl.Float32),
+                pl.col("voltage_V").cast(pl.Float32) / 10000,
+                pl.col("current_mA").cast(pl.Float32) / 1000,
+                (pl.col("capacity_mAh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
+                _count_changes(pl.col("step_index")).alias("step_count"),
+            ]
+        )
+    )
+
+
+def _read_nda_2(mm: mmap.mmap) -> pl.DataFrame:
+    """Read nda version 2 (deprecated by Neware - unreachable in BTSDA)."""
+    header_idx = _nda_head_main_begin(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=57)
+    dtype = np.dtype(
+        [
+            ("identifier", "<u1"),
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u1"),
+            ("step_type", "<u1"),
+            ("step_time_s", "<u4"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
+            ("_pad1", "V8"),  # nIR, iTemp
+            ("capacity_mAh", "<i8"),
+            ("_pad2", "V1"),  # bEng flag
+            ("energy_mWh", "<i8"),
+            ("_pad3", "V1"),  # bLocalTime flag
+            ("unix_time_s", "<u8"),
+        ]
+    )
+    return (
+        _view_arr(arr, dtype)
+        .filter(pl.col("identifier").is_in([0, 85]))
+        .drop("identifier")
+        .with_columns(
+            [
+                pl.col("cycle_count") + 1,
+                pl.col("step_time_s").cast(pl.Float32),
+                pl.col("voltage_V").cast(pl.Float32) / 10000,
+                pl.col("current_mA").cast(pl.Float32) / 1000,
+                (pl.col("capacity_mAh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
+                (pl.col("energy_mWh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
+                _count_changes(pl.col("step_index")).alias("step_count"),
+            ]
+        )
+    )
+
+
+def _read_nda_3(mm: mmap.mmap) -> pl.DataFrame:
+    """Read nda version 3 (file version 3, 4)."""
+    header_idx = _nda_head_main_begin(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=43)
+    dtype = np.dtype(
+        [
+            ("identifier", "<u1"),
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u1"),
+            ("step_type", "<u1"),
+            ("step_time_s", "<u4"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
+            ("_pad1", "V8"),  # nIR, iTemp
+            ("capacity_mAh", "<i8"),
+            ("_pad2", "V4"),  # dwCRC32
+        ]
+    )
+    return (
+        _view_arr(arr, dtype)
+        .filter(pl.col("identifier").is_in([0, 85]))
+        .drop("identifier")
+        .with_columns(
+            [
+                pl.col("cycle_count") + 1,
+                pl.col("step_time_s").cast(pl.Float32),
+                pl.col("voltage_V").cast(pl.Float32) / 10000,
+                pl.col("current_mA").cast(pl.Float32) / 1000,
+                (pl.col("capacity_mAh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
+                _count_changes(pl.col("step_index")).alias("step_count"),
+            ]
+        )
+    )
+
+
 def _read_nda_5(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 8."""
+    """Read nda version 5 (file versions 5, 6, 7, 8)."""
     # Identify the beginning of the data section - first byte 255 and index = 1
     arr = _get_arr_from_nda(mm, header=b"\xff\x01\x00\x00\x00", record_len=59)
     dtype = np.dtype(
@@ -211,8 +339,128 @@ def _read_nda_5(mm: mmap.mmap) -> pl.DataFrame:
     )
 
 
+def _read_nda_9(mm: mmap.mmap) -> pl.DataFrame:
+    """Read nda version 9."""
+    header_idx = _nda_head_main_begin(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=60)
+    dtype = np.dtype(
+        [
+            ("identifier", "<u1"),
+            ("_pad0", "V1"),  # btAuxChlID
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u1"),
+            ("step_type", "<u1"),
+            ("step_time_s", "<u4"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
+            ("_pad1", "V8"),  # nIR, iTemp
+            ("capacity_mAh", "<i8"),
+            ("energy_mWh", "<i8"),
+            ("unix_time_s", "<u8"),
+            ("_pad2", "V4"),  # dwCRC32
+        ]
+    )
+    return _mask_arr(arr, dtype, 85).with_columns(
+        [
+            pl.col("cycle_count") + 1,
+            pl.col("step_time_s").cast(pl.Float32),
+            pl.col("voltage_V").cast(pl.Float32) / 10000,
+            pl.col("current_mA").cast(pl.Float32) / 1000,
+            (pl.col("capacity_mAh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
+            (pl.col("energy_mWh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
+            _count_changes(pl.col("step_index")).alias("step_count"),
+        ]
+    )
+
+
+def _read_nda_10(mm: mmap.mmap) -> pl.DataFrame:
+    """Read nda version 10."""
+    header_idx = _nda_head_main_begin(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=64)
+    dtype = np.dtype(
+        [
+            ("identifier", "<u1"),
+            ("_pad0", "V1"),  # btAuxChlID
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u1"),
+            ("step_type", "<u1"),
+            ("step_time_s", "<u8"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
+            ("_pad1", "V8"),  # nIR, iTemp
+            ("capacity_mAh", "<i8"),
+            ("energy_mWh", "<i8"),
+            ("unix_time_s", "<u8"),
+            ("_pad2", "V4"),  # dwCRC32
+        ]
+    )
+    return _mask_arr(arr, dtype, 85).with_columns(
+        [
+            pl.col("cycle_count") + 1,
+            pl.col("step_time_s").cast(pl.Float32) / 1000,
+            pl.col("voltage_V").cast(pl.Float32) / 10000,
+            pl.col("current_mA").cast(pl.Float32) / 1000,
+            (pl.col("capacity_mAh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
+            (pl.col("energy_mWh").cast(pl.Float64) * pl.col("current_mA").sign()) / 3600000,
+            _count_changes(pl.col("step_index")).alias("step_count"),
+        ]
+    )
+
+
+def _read_nda_11(mm: mmap.mmap) -> pl.DataFrame:
+    """Read nda struct 11 (file versions 11, 12, 13, 15, 18)."""
+    pos_offset = 32 if int(mm[14]) == 11 else 64
+    header_idx = _nda_head_main_begin(mm, pos_offset=pos_offset)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=69)
+    dtype = np.dtype(
+        [
+            ("identifier", "<u1"),
+            ("_pad0", "V1"),  # btAuxChlID
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u2"),
+            ("step_type", "<u1"),
+            ("step_time_s", "<u8"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
+            ("_pad1", "V8"),  # nIR, iTemp
+            ("capacity_mAh", "<i8"),
+            ("energy_mWh", "<i8"),
+            ("unix_time_s", "<u8"),
+            ("range", "<i4"),
+            ("_pad2", "V4"),  # dwCRC32
+        ]
+    )
+    return (
+        _mask_arr(arr, dtype, 85)
+        .with_columns(
+            [
+                pl.col("cycle_count") + 1,
+                pl.col("step_time_s").cast(pl.Float32) / 1000,
+                pl.col("voltage_V").cast(pl.Float32) / 10000,
+                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
+                _count_changes(pl.col("step_index")).alias("step_count"),
+            ]
+        )
+        .with_columns(
+            [
+                pl.col("current_mA") * pl.col("multiplier"),
+                (
+                    pl.col("capacity_mAh").cast(pl.Float64) * pl.col("multiplier") * pl.col("current_mA").sign() / 3600
+                ).cast(pl.Float32),
+                (
+                    pl.col("energy_mWh").cast(pl.Float64) * pl.col("multiplier") * pl.col("current_mA").sign() / 3600
+                ).cast(pl.Float32),
+            ]
+        )
+        .drop(["multiplier", "range"])
+    )
+
+
 def _read_nda_14(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 22."""
+    """Read nda version 14 (file versions 14, 16, 17, 20, 22, 23, 24)."""
     arr = _get_arr_from_nda(mm, b"\xaa\x00\x01\x00\x00\x00", 86)
     data_dtype = np.dtype(
         [
@@ -252,6 +500,97 @@ def _read_nda_14(mm: mmap.mmap) -> pl.DataFrame:
             [
                 pl.col("current_mA") * pl.col("multiplier"),
                 (pl.col(mult_cols).cast(pl.Float64) * pl.col("multiplier").cast(pl.Float64) / 3600).cast(pl.Float32),
+            ]
+        )
+        .drop(["multiplier", "range"])
+    )
+
+
+def _read_nda_19(mm: mmap.mmap) -> pl.DataFrame:
+    """Read nda version 19."""
+    header_idx = _nda_head_main_begin(mm, pos_offset=64)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=68)
+    dtype = np.dtype(
+        [
+            ("identifier", "<u1"),
+            ("_pad0", "V3"),  # btSubDevID, btChannelID, btAuxChlID
+            ("_pad0b", "V4"),  # dwTestID
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u2"),
+            ("step_type", "<u1"),
+            ("_pad1", "V1"),  # btWorkType
+            ("_pad2", "V1"),  # btStepChgCount
+            ("_pad3", "V3"),  # btReserved
+            ("step_time_s", "<u4"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
+            ("_pad4", "V8"),  # nIR, iTemp
+            ("charge_capacity_mAh", "<i4"),
+            ("discharge_capacity_mAh", "<i4"),
+            ("charge_energy_mWh", "<i4"),
+            ("discharge_energy_mWh", "<i4"),
+            ("unix_time_s", "<u4"),
+            ("_pad5", "V4"),  # dwCRC32
+        ]
+    )
+    mult_cols = ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"]
+    return _mask_arr(arr, dtype, 85).with_columns(
+        [
+            pl.col("cycle_count") + 1,
+            pl.col("step_time_s").cast(pl.Float32),
+            pl.col("voltage_V").cast(pl.Float32) / 10000,
+            pl.col("current_mA").cast(pl.Float32) / 1000,
+            (pl.col(mult_cols).cast(pl.Float64) / 3600).cast(pl.Float32),
+            _count_changes(pl.col("step_index")).alias("step_count"),
+        ]
+    )
+
+
+def _read_nda_25(mm: mmap.mmap) -> pl.DataFrame:
+    """Read nda version 25 (file versions 25, 27)."""
+    header_idx = _nda_head_main_begin(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=70)
+    dtype = np.dtype(
+        [
+            ("identifier", "<u1"),
+            ("_pad0", "V1"),  # btAuxChlID
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u2"),
+            ("step_type", "<u1"),
+            ("step_time_s", "<u8"),
+            ("voltage_V", "<i4"),
+            ("current_mA", "<i4"),
+            ("_pad1", "V8"),  # nIR, iTemp
+            ("capacity_mAh", "<i8"),
+            ("energy_mWh", "<i8"),
+            ("unix_time_s", "<u8"),
+            ("range", "<i4"),
+            ("_pad2", "V1"),  # btStepChgCount
+            ("_pad3", "V4"),  # dwCRC32
+        ]
+    )
+    return (
+        _mask_arr(arr, dtype, 85)
+        .with_columns(
+            [
+                pl.col("cycle_count") + 1,
+                pl.col("step_time_s").cast(pl.Float32) / 1000,
+                pl.col("voltage_V").cast(pl.Float32) / 10000,
+                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
+                _count_changes(pl.col("step_index")).alias("step_count"),
+            ]
+        )
+        .with_columns(
+            [
+                pl.col("current_mA") * pl.col("multiplier"),
+                (
+                    pl.col("capacity_mAh").cast(pl.Float64) * pl.col("multiplier") * pl.col("current_mA").sign() / 3600
+                ).cast(pl.Float32),
+                (
+                    pl.col("energy_mWh").cast(pl.Float64) * pl.col("multiplier") * pl.col("current_mA").sign() / 3600
+                ).cast(pl.Float32),
             ]
         )
         .drop(["multiplier", "range"])
@@ -333,6 +672,51 @@ def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
         ]
     )
     return _merge_aux(data_df, aux_df)
+
+
+def _read_nda_129(mm: mmap.mmap) -> pl.DataFrame:
+    """Read nda version 129 (deprecated by Neware)."""
+    header_idx = _nda_head_main_begin(mm, pos_offset=82, pos64=True)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=88)
+    dtype = np.dtype(
+        [
+            ("identifier", "<u1"),
+            ("_pad0", "V5"),  # btDevType, btDevID, btUnitID, btChlID, btAuxChlIndex
+            ("_pad0b", "V2"),  # wReserve
+            ("_pad0c", "V4"),  # dwTestID
+            ("index", "<u4"),  # dwTestDataSN
+            ("_pad0d", "V4"),  # dwUnitNuid
+            ("step_index", "<u1"),
+            ("step_type", "<u1"),
+            ("_pad1", "V1"),  # btStepChgCount
+            ("_pad2", "V1"),  # btReserve
+            ("_pad3", "V4"),  # stWorkStatus
+            ("step_time_s", "<u4"),  # Time64.dwS
+            ("_pad4", "V4"),  # Time64.dwNS
+            ("voltage_V", "<f4"),
+            ("current_mA", "<f4"),
+            ("_pad5", "V8"),  # fInterRes, fTempture
+            ("charge_capacity_mAh", "<f4"),
+            ("charge_energy_mWh", "<f4"),
+            ("discharge_capacity_mAh", "<f4"),
+            ("discharge_energy_mWh", "<f4"),
+            ("unix_time_s", "<u8"),  # microseconds
+            ("_pad6", "V12"),  # dwCurStepRange, dwLogCode, dwCRC32
+        ]
+    )
+    mult_cols = ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"]
+    return (
+        _view_arr(arr, dtype)
+        .filter(pl.col("identifier").is_in([0, 85]))
+        .drop("identifier")
+        .with_columns(
+            [
+                pl.col(mult_cols) / 3600,
+                (pl.col("unix_time_s").cast(pl.Float64) / 1e6).alias("unix_time_s"),
+                _count_changes(pl.col("step_index")).alias("step_count"),
+            ]
+        )
+    )
 
 
 def _read_nda_130(mm: mmap.mmap) -> pl.DataFrame:
@@ -440,55 +824,37 @@ def _read_nda_130_90(mm: mmap.mmap) -> pl.DataFrame:
     )
 
 
-# NDA FileVer code -> struct type
-NDA_FILE_TO_STRUCT: dict[int, int] = {
-    1: 1,
-    2: 2,
-    3: 3,
-    4: 3,
-    5: 5,
-    6: 5,
-    7: 5,
-    8: 5,
-    9: 9,
-    10: 10,
-    11: 11,
-    12: 11,
-    13: 11,
-    14: 14,
-    15: 11,
-    16: 14,
-    17: 14,
-    18: 11,
-    19: 19,
-    20: 14,
-    22: 14,
-    23: 14,
-    24: 14,
-    25: 25,
-    26: 29,
-    27: 25,
-    28: 29,
-    29: 29,
-    129: 129,
-    130: 130,  # Variable length
-}
-
-# NDA Struct type -> reader
-NDA_STRUCT_TO_READER: dict[int, None | Callable[[mmap.mmap], pl.DataFrame]] = {
-    1: None,
-    2: None,
-    3: None,
+# NDA FileVer code -> struct type reader
+NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
+    1: _read_nda_1,
+    2: _read_nda_2,  # Deprecated by Neware
+    3: _read_nda_3,
+    4: _read_nda_3,
     5: _read_nda_5,
-    9: None,
-    10: None,
-    11: None,
+    6: _read_nda_5,
+    7: _read_nda_5,
+    8: _read_nda_5,
+    9: _read_nda_9,
+    10: _read_nda_10,
+    11: _read_nda_11,
+    12: _read_nda_11,
+    13: _read_nda_11,
     14: _read_nda_14,
-    19: None,
-    25: None,
+    15: _read_nda_11,
+    16: _read_nda_14,
+    17: _read_nda_14,
+    18: _read_nda_11,
+    19: _read_nda_19,
+    20: _read_nda_14,
+    # 21: Missing in Neware
+    22: _read_nda_14,
+    23: _read_nda_14,
+    24: _read_nda_14,
+    25: _read_nda_25,
+    26: _read_nda_29,
+    27: _read_nda_25,
+    28: _read_nda_29,
     29: _read_nda_29,
-    129: None,
-    130: _read_nda_130,
+    129: _read_nda_129,  # Deprecated by Neware
+    130: _read_nda_130,  # Variable length
 }
-
-NDA_READERS = {k: NDA_STRUCT_TO_READER[v] for k, v in NDA_FILE_TO_STRUCT.items()}
