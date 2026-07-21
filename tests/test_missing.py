@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from fastnda.nda import _read_nda_8, _read_nda_29, read_nda, read_nda_metadata
+from fastnda.nda import _read_nda_5, _read_nda_29, read_nda, read_nda_metadata
 from fastnda.ndax import _read_ndc, _read_ndc_11_filetype_5, _read_ndc_16_filetype_5
 
 
@@ -41,4 +41,4 @@ class TestMissing:
         with pytest.raises(EOFError):
             _read_nda_29(mm)
         with pytest.raises(EOFError):
-            _read_nda_8(mm)
+            _read_nda_5(mm)

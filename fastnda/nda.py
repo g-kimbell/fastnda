@@ -178,7 +178,7 @@ def _read_nda(mm: mmap.mmap) -> pl.DataFrame:
     return reader(mm)
 
 
-def _read_nda_8(mm: mmap.mmap) -> pl.DataFrame:
+def _read_nda_5(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 8."""
     # Identify the beginning of the data section - first byte 255 and index = 1
     arr = _get_arr_from_nda(mm, header=b"\xff\x01\x00\x00\x00", record_len=59)
@@ -211,7 +211,7 @@ def _read_nda_8(mm: mmap.mmap) -> pl.DataFrame:
     )
 
 
-def _read_nda_22(mm: mmap.mmap) -> pl.DataFrame:
+def _read_nda_14(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 22."""
     arr = _get_arr_from_nda(mm, b"\xaa\x00\x01\x00\x00\x00", 86)
     data_dtype = np.dtype(
@@ -440,11 +440,55 @@ def _read_nda_130_90(mm: mmap.mmap) -> pl.DataFrame:
     )
 
 
-NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
-    8: _read_nda_8,
-    22: _read_nda_22,
-    23: _read_nda_22,
-    26: _read_nda_29,
+# NDA FileVer code -> struct type
+NDA_FILE_TO_STRUCT: dict[int, int] = {
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 3,
+    5: 5,
+    6: 5,
+    7: 5,
+    8: 5,
+    9: 9,
+    10: 10,
+    11: 11,
+    12: 11,
+    13: 11,
+    14: 14,
+    15: 11,
+    16: 14,
+    17: 14,
+    18: 11,
+    19: 19,
+    20: 14,
+    22: 14,
+    23: 14,
+    24: 14,
+    25: 25,
+    26: 29,
+    27: 25,
+    28: 29,
+    29: 29,
+    129: 129,
+    130: 130,  # Variable length
+}
+
+# NDA Struct type -> reader
+NDA_STRUCT_TO_READER: dict[int, None | Callable[[mmap.mmap], pl.DataFrame]] = {
+    1: None,
+    2: None,
+    3: None,
+    5: _read_nda_5,
+    9: None,
+    10: None,
+    11: None,
+    14: _read_nda_14,
+    19: None,
+    25: None,
     29: _read_nda_29,
+    129: None,
     130: _read_nda_130,
 }
+
+NDA_READERS = {k: NDA_STRUCT_TO_READER[v] for k, v in NDA_FILE_TO_STRUCT.items()}
