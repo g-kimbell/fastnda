@@ -691,8 +691,8 @@ def _read_nda_129(mm: mmap.mmap) -> pl.DataFrame:
             ("_pad1", "V1"),  # btStepChgCount
             ("_pad2", "V1"),  # btReserve
             ("_pad3", "V4"),  # stWorkStatus
-            ("step_time_s", "<u4"),  # Time64.dwS
-            ("_pad4", "V4"),  # Time64.dwNS
+            ("step_time_s", "<u4"),  # Time64.dwS (seconds)
+            ("step_time_ns", "<u4"),  # Time64.dwNS (nanoseconds)
             ("voltage_V", "<f4"),
             ("current_mA", "<f4"),
             ("_pad5", "V8"),  # fInterRes, fTempture
@@ -713,9 +713,13 @@ def _read_nda_129(mm: mmap.mmap) -> pl.DataFrame:
             [
                 pl.col(mult_cols) / 3600,
                 (pl.col("unix_time_s").cast(pl.Float64) / 1e6).alias("unix_time_s"),
+                (pl.col("step_time_s").cast(pl.Float64) + pl.col("step_time_ns") / 1e9)
+                .cast(pl.Float32)
+                .alias("step_time_s"),
                 _count_changes(pl.col("step_index")).alias("step_count"),
             ]
         )
+        .drop("step_time_ns")
     )
 
 
