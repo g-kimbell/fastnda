@@ -12,6 +12,7 @@ newly-added structs are currently best guesses, not confirmed with real data.
 
 import mmap
 import struct
+import warnings
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import ClassVar
@@ -1082,3 +1083,65 @@ class TestReadNda13091:
         _assert_col(df, "unix_time_s", [1700000000.0, 1700000010.0])
         _assert_col(df, "total_time_s", [10.0, 20.0])
         _assert_col(df, "step_count", [1, 2])
+
+
+class TestUnverifiedFormatWarning:
+    """UnverifiedFormatWarning fires for unconfirmed nda_versions, not for confirmed ones.
+
+    Builds full "NEWARE"-prefixed buffers and reads them through nda._read_nda, where the
+    warning fires.
+    """
+
+    def test_warns_for_unverified_version(self) -> None:
+        """nda_version 1 (no real data) emits UnverifiedFormatWarning."""
+        header = bytearray(_header_offset_preamble(pos_offset=32, main_begin=36))
+        header[0:6] = b"NEWARE"
+        header[14] = 1  # nda_version
+        record = _build_rows(
+            TestReadNda1.LAYOUT,
+            TestReadNda1.DEFAULTS,
+            columns={
+                "index": [1],
+                "step_index": [1],
+                "step_type": [1],
+                "step_time_s": [10],
+                "voltage_V": [36000],
+                "current_mA": [200000],
+                "capacity_mAh": [1800000],
+            },
+        )
+        mm = _make_mmap(bytes(header) + record)
+
+        with pytest.warns(nda.UnverifiedFormatWarning, match="nda_version 1 "):
+            df = nda._read_nda(mm)
+
+        assert len(df) == 1
+
+    def test_no_warning_for_confirmed_version(self) -> None:
+        """nda_version 8 (has real data) emits no UnverifiedFormatWarning."""
+        header = bytearray(15)
+        header[0:6] = b"NEWARE"
+        header[14] = 8  # nda_version
+        record = _build_rows(
+            TestReadNda5.LAYOUT,
+            TestReadNda5.DEFAULTS,
+            columns={
+                "index": [1],
+                "step_index": [1],
+                "step_type": [1],
+                "step_time_s": [10],
+                "voltage_V": [36000],
+                "current_mA": [200000],
+                "capacity_mAh": [1800000],
+                "energy_mWh": [3600000],
+                "unix_time_s": [1700000000],
+            },
+        )
+        mm = _make_mmap(bytes(header) + TestReadNda5.SENTINEL + record)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            df = nda._read_nda(mm)
+
+        assert not any(issubclass(w.category, nda.UnverifiedFormatWarning) for w in caught)
+        assert len(df) == 1

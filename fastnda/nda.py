@@ -3,6 +3,7 @@
 import logging
 import mmap
 import struct
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 
@@ -13,6 +14,10 @@ from fastnda.dicts import MULTIPLIER_MAP
 from fastnda.utils import _count_changes
 
 logger = logging.getLogger(__name__)
+
+
+class UnverifiedFormatWarning(UserWarning):
+    """Raised when reading an nda_version which hasn't been tested against real data."""
 
 
 def read_nda(file: str | Path) -> pl.DataFrame:
@@ -193,6 +198,14 @@ def _read_nda(mm: mmap.mmap) -> pl.DataFrame:
     if reader is None:
         msg = f"nda version {nda_version} is not yet supported!"
         raise NotImplementedError(msg) from None
+    if nda_version not in _CONFIRMED_NDA_VERSIONS:
+        warnings.warn(
+            f"nda_version {nda_version} has not been verified against real Neware data - results may be "
+            "incorrect. If you can, please share a sample file at "
+            "https://github.com/empaeconversion/fastnda/issues so we can confirm this format.",
+            UnverifiedFormatWarning,
+            stacklevel=2,
+        )
     logger.debug("Reading nda version %d", nda_version)
     return reader(mm)
 
@@ -862,3 +875,9 @@ NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
     129: _read_nda_129,  # Deprecated by Neware
     130: _read_nda_130,  # Variable length
 }
+
+# Reader functions confirmed against real data
+_CONFIRMED_READER_NAMES = frozenset({"_read_nda_5", "_read_nda_14", "_read_nda_29", "_read_nda_130"})
+_CONFIRMED_NDA_VERSIONS = frozenset(
+    version for version, reader in NDA_READERS.items() if reader.__name__ in _CONFIRMED_READER_NAMES
+)
