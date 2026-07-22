@@ -69,6 +69,7 @@ fix = true
 "tests/*.py" = [
     "S101", # asserts allowed in tests
     "PT011", # allow just checking for ValueError without match
+    "SLF001", # unit tests intentionally reach into private _read_nda_x internals
 ]
 
 [tool.pytest.ini_options]
