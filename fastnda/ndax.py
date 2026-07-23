@@ -923,7 +923,7 @@ def _read_ndc_step_16(buf: bytes) -> pl.DataFrame:
     return _bytes_to_df(buf, dtype).with_columns(
         [
             pl.col("cycle_count") + 1,
-            _count_changes(pl.col("step_index")).alias("step_count"),
+            pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("step_count"),
         ]
     )
 
@@ -961,26 +961,6 @@ def _read_ndc_runinfo_16(buf: bytes) -> pl.DataFrame:
         )
         .drop("uts_ms")
         .unique(subset="index", keep="first")
-    )
-
-
-def _read_ndc_step_17(buf: bytes) -> pl.DataFrame:
-    dtype = np.dtype(
-        [
-            ("cycle_count", "<u4"),
-            ("step_index", "<u4"),
-            ("_pad1", "V16"),
-            ("step_type", "<u1"),
-            ("_pad2", "V8"),
-            ("step_count", "<u4"),
-            ("_pad3", "V63"),
-        ]
-    )
-    return _bytes_to_df(buf, dtype).with_columns(
-        [
-            pl.col("cycle_count") + 1,
-            pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("step_count"),
-        ]
     )
 
 
@@ -1142,7 +1122,7 @@ NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
     # ndax 17
     (17, 1): _read_ndc_main_14,
     (17, 5): _read_ndc_aux_6,
-    (17, 7): _read_ndc_step_17,
+    (17, 7): _read_ndc_step_16,
     (17, 18): _read_ndc_runinfo_17,
 }
 
