@@ -11,13 +11,9 @@ import numpy as np
 import polars as pl
 
 from fastnda.dicts import MULTIPLIER_MAP
-from fastnda.utils import _count_changes
+from fastnda.utils import UnverifiedFormatWarning, _count_changes
 
 logger = logging.getLogger(__name__)
-
-
-class UnverifiedFormatWarning(UserWarning):
-    """Raised when reading an nda_version which hasn't been tested against real data."""
 
 
 def read_nda(file: str | Path) -> pl.DataFrame:

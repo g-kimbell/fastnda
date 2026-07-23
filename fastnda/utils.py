@@ -68,3 +68,7 @@ def _id_first_state(df: pl.DataFrame) -> Literal["chg", "dchg"]:
     if not filtered.is_empty() and CHARGE_DISCHARGE_MAP[filtered[0, "step_type"]] == 1:
         return "chg"
     return "dchg"
+
+
+class UnverifiedFormatWarning(UserWarning):
+    """Raised when reading an nda_version which hasn't been tested against real data."""
