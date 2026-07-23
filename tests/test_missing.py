@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from fastnda.nda import _read_nda_5, _read_nda_29, read_nda, read_nda_metadata
-from fastnda.ndax import _read_ndc, _read_ndc_11_filetype_5, _read_ndc_16_filetype_5
+from fastnda.ndax import _read_ndc, _read_ndc_aux_11, _read_ndc_aux_16
 
 
 class TestMissing:
@@ -17,9 +17,9 @@ class TestMissing:
         with pytest.raises(NotImplementedError):
             _read_ndc(b"999999999")
         with pytest.raises(NotImplementedError):
-            _read_ndc_11_filetype_5(b"999999999")
+            _read_ndc_aux_11(b"999999999")
         with pytest.raises(NotImplementedError):
-            _read_ndc_16_filetype_5(b"999999999")
+            _read_ndc_aux_16(b"999999999")
 
     def test_bad_nda(self, tmp_path: Path) -> None:
         """Unknown nda type."""

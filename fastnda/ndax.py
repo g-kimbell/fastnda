@@ -277,7 +277,7 @@ def _read_ndc(buf: bytes) -> pl.DataFrame:
     return reader(buf)
 
 
-def _read_ndc_1_filetype_1(buf: bytes) -> pl.DataFrame:
+def _read_ndc_main_1(buf: bytes) -> pl.DataFrame:
     """Read ndc version 1 filetype 1. Also used for version 3."""
     dtype = np.dtype(
         [
@@ -335,7 +335,7 @@ def _read_ndc_1_filetype_1(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_2_filetype_1(buf: bytes) -> pl.DataFrame:
+def _read_ndc_main_2(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("_pad1", "V8"),
@@ -393,7 +393,7 @@ def _read_ndc_2_filetype_1(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_2_filetype_5(buf: bytes) -> pl.DataFrame:
+def _read_ndc_aux_2(buf: bytes) -> pl.DataFrame:
     # This dtype is missing humudity % column - does not exist in current test data
     dtype = np.dtype(
         [
@@ -421,7 +421,7 @@ def _read_ndc_2_filetype_5(buf: bytes) -> pl.DataFrame:
     return df.select(pl.exclude(cols_to_drop))
 
 
-def _read_ndc_5_filetype_1(buf: bytes) -> pl.DataFrame:
+def _read_ndc_main_5(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("_pad1", "V1"),
@@ -479,7 +479,7 @@ def _read_ndc_5_filetype_1(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_5_filetype_5(buf: bytes) -> pl.DataFrame:
+def _read_ndc_aux_5(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("_pad2", "V1"),
@@ -506,7 +506,7 @@ def _read_ndc_5_filetype_5(buf: bytes) -> pl.DataFrame:
     return df.select(pl.exclude(cols_to_drop))
 
 
-def _read_ndc_6_filetype_1(buf: bytes) -> pl.DataFrame:
+def _read_ndc_main_6(buf: bytes) -> pl.DataFrame:
     """Read ndc version 6 filetype 1.
 
     v6's main record contains the capacity/energy/step fields.
@@ -535,7 +535,7 @@ def _read_ndc_6_filetype_1(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_9_filetype_5(buf: bytes) -> pl.DataFrame:
+def _read_ndc_aux_9(buf: bytes) -> pl.DataFrame:
     """Read ndc version 9 filetype 5. Also used for version 13."""
     dtype = np.dtype(
         [
@@ -590,7 +590,7 @@ def _read_ndc_9_filetype_5(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_9_filetype_18(buf: bytes) -> pl.DataFrame:
+def _read_ndc_runinfo_2(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("step_time_s", "<u4"),
@@ -618,7 +618,7 @@ def _read_ndc_9_filetype_18(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_8_filetype_18(buf: bytes) -> pl.DataFrame:
+def _read_ndc_runinfo_1(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("step_time_s", "<u4"),
@@ -646,7 +646,7 @@ def _read_ndc_8_filetype_18(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_13_filetype_18(buf: bytes) -> pl.DataFrame:
+def _read_ndc_runinfo_13(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("step_time_s", "<u4"),
@@ -678,7 +678,7 @@ def _read_ndc_13_filetype_18(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_11_filetype_1(buf: bytes) -> pl.DataFrame:
+def _read_ndc_main_11(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("voltage_V", "<f4"),
@@ -692,7 +692,7 @@ def _read_ndc_11_filetype_1(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_11_filetype_5(buf: bytes) -> pl.DataFrame:
+def _read_ndc_aux_11(buf: bytes) -> pl.DataFrame:
     header = 4096
     identifier = buf[header + 132 : header + 133]
     if identifier == b"\x65":
@@ -739,7 +739,7 @@ def _read_ndc_11_filetype_5(buf: bytes) -> pl.DataFrame:
     raise NotImplementedError(msg)
 
 
-def _read_ndc_11_filetype_7(buf: bytes) -> pl.DataFrame:
+def _read_ndc_step_11(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("cycle_count", "<u4"),
@@ -757,7 +757,7 @@ def _read_ndc_11_filetype_7(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_11_filetype_18(buf: bytes) -> pl.DataFrame:
+def _read_ndc_runinfo_11(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("step_time_s", "<u4"),
@@ -790,7 +790,7 @@ def _read_ndc_11_filetype_18(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_14_filetype_1(buf: bytes) -> pl.DataFrame:
+def _read_ndc_main_14(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("voltage_V", "<f4"),
@@ -804,7 +804,7 @@ def _read_ndc_14_filetype_1(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_14_filetype_5(buf: bytes) -> pl.DataFrame:
+def _read_ndc_aux_6(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("?", "<f4"),  # Column name is assigned later from TestInfo.xml
@@ -817,7 +817,7 @@ def _read_ndc_14_filetype_5(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_14_filetype_7(buf: bytes) -> pl.DataFrame:
+def _read_ndc_step_6(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("cycle_count", "<u4"),
@@ -835,7 +835,7 @@ def _read_ndc_14_filetype_7(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_14_filetype_18(buf: bytes) -> pl.DataFrame:
+def _read_ndc_runinfo_14(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("step_time_s", "<u4"),
@@ -869,7 +869,7 @@ def _read_ndc_14_filetype_18(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_16_filetype_1(buf: bytes) -> pl.DataFrame:
+def _read_ndc_main_16(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("voltage_V", "<f4"),
@@ -884,7 +884,7 @@ def _read_ndc_16_filetype_1(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_16_filetype_5(buf: bytes) -> pl.DataFrame:
+def _read_ndc_aux_16(buf: bytes) -> pl.DataFrame:
     header = 4096
     if buf[header + 132 : header + 133] == b"\x65":
         dtype = np.dtype(
@@ -908,7 +908,7 @@ def _read_ndc_16_filetype_5(buf: bytes) -> pl.DataFrame:
     raise NotImplementedError(msg)
 
 
-def _read_ndc_16_filetype_7(buf: bytes) -> pl.DataFrame:
+def _read_ndc_step_16(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("cycle_count", "<u4"),
@@ -928,7 +928,7 @@ def _read_ndc_16_filetype_7(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_16_filetype_18(buf: bytes) -> pl.DataFrame:
+def _read_ndc_runinfo_16(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("step_time_s", "<u4"),
@@ -964,11 +964,11 @@ def _read_ndc_16_filetype_18(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_17_filetype_1(buf: bytes) -> pl.DataFrame:
-    return _read_ndc_14_filetype_1(buf)
+def _read_ndc_main_17(buf: bytes) -> pl.DataFrame:
+    return _read_ndc_main_14(buf)
 
 
-def _read_ndc_17_filetype_7(buf: bytes) -> pl.DataFrame:
+def _read_ndc_step_17(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("cycle_count", "<u4"),
@@ -988,7 +988,7 @@ def _read_ndc_17_filetype_7(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_17_filetype_18(buf: bytes) -> pl.DataFrame:
+def _read_ndc_runinfo_17(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("step_time_s", "<u4"),
@@ -1085,53 +1085,69 @@ def _bytes_to_df(
 
 # Map NDC (version, filetype) to handler functions
 NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
-    (1, 1): _read_ndc_1_filetype_1,
-    (2, 1): _read_ndc_2_filetype_1,
-    (2, 5): _read_ndc_2_filetype_5,
-    (3, 1): _read_ndc_1_filetype_1,
-    (4, 1): _read_ndc_2_filetype_1,
-    (4, 5): _read_ndc_2_filetype_5,
-    (5, 1): _read_ndc_5_filetype_1,
-    (5, 5): _read_ndc_5_filetype_5,
-    (6, 1): _read_ndc_6_filetype_1,
-    (6, 5): _read_ndc_14_filetype_5,
-    (6, 7): _read_ndc_14_filetype_7,
-    (7, 1): _read_ndc_5_filetype_1,
-    (7, 5): _read_ndc_5_filetype_5,
-    (8, 1): _read_ndc_14_filetype_1,
-    (8, 5): _read_ndc_14_filetype_5,
-    (8, 7): _read_ndc_14_filetype_7,
-    (8, 18): _read_ndc_8_filetype_18,
-    (9, 1): _read_ndc_11_filetype_1,
-    (9, 5): _read_ndc_9_filetype_5,
-    (9, 7): _read_ndc_14_filetype_7,
-    (9, 18): _read_ndc_9_filetype_18,
-    # 10 not used by Neware
-    (11, 1): _read_ndc_11_filetype_1,
-    (11, 5): _read_ndc_11_filetype_5,
-    (11, 7): _read_ndc_11_filetype_7,
-    (11, 18): _read_ndc_11_filetype_18,
-    (12, 1): _read_ndc_14_filetype_1,
-    (12, 5): _read_ndc_14_filetype_5,
-    (12, 7): _read_ndc_14_filetype_7,
-    (12, 18): _read_ndc_11_filetype_18,
-    (13, 1): _read_ndc_11_filetype_1,
-    (13, 5): _read_ndc_9_filetype_5,
-    (13, 7): _read_ndc_14_filetype_7,
-    (13, 18): _read_ndc_13_filetype_18,
-    (14, 1): _read_ndc_14_filetype_1,
-    (14, 5): _read_ndc_14_filetype_5,
-    (14, 7): _read_ndc_14_filetype_7,
-    (14, 18): _read_ndc_14_filetype_18,
-    (15, 1): None,  # BTS9.x needs more investigations
-    (16, 1): _read_ndc_16_filetype_1,
-    (16, 5): _read_ndc_16_filetype_5,
-    (16, 7): _read_ndc_16_filetype_7,
-    (16, 18): _read_ndc_16_filetype_18,
-    (17, 1): _read_ndc_17_filetype_1,
-    (17, 5): _read_ndc_14_filetype_5,
-    (17, 7): _read_ndc_17_filetype_7,
-    (17, 18): _read_ndc_17_filetype_18,
+    # ndax 1
+    (1, 1): _read_ndc_main_1,
+    # ndax 2
+    (2, 1): _read_ndc_main_2,
+    (2, 5): _read_ndc_aux_2,
+    # ndax 3 - probably never used
+    (3, 1): _read_ndc_main_1,
+    # ndax 4 - probably never used
+    (4, 1): _read_ndc_main_2,
+    (4, 5): _read_ndc_aux_2,
+    # ndax 5
+    (5, 1): _read_ndc_main_5,
+    (5, 5): _read_ndc_aux_5,
+    # ndax 6
+    (6, 1): _read_ndc_main_6,
+    (6, 5): _read_ndc_aux_6,
+    (6, 7): _read_ndc_step_6,
+    # ndax 7
+    (7, 1): _read_ndc_main_5,
+    (7, 5): _read_ndc_aux_5,
+    # ndax 8
+    (8, 1): _read_ndc_main_14,
+    (8, 5): _read_ndc_aux_6,
+    (8, 7): _read_ndc_step_6,
+    (8, 18): _read_ndc_runinfo_1,
+    # ndax 9
+    (9, 1): _read_ndc_main_11,
+    (9, 5): _read_ndc_aux_9,
+    (9, 7): _read_ndc_step_6,
+    (9, 18): _read_ndc_runinfo_2,
+    # ndax 10 - probably never used
+    # ndax 11
+    (11, 1): _read_ndc_main_11,
+    (11, 5): _read_ndc_aux_11,
+    (11, 7): _read_ndc_step_11,
+    (11, 18): _read_ndc_runinfo_11,
+    # ndax 12
+    (12, 1): _read_ndc_main_14,
+    (12, 5): _read_ndc_aux_6,
+    (12, 7): _read_ndc_step_6,
+    (12, 18): _read_ndc_runinfo_11,
+    # ndax 13
+    (13, 1): _read_ndc_main_11,
+    (13, 5): _read_ndc_aux_9,
+    (13, 7): _read_ndc_step_6,
+    (13, 18): _read_ndc_runinfo_13,
+    # ndax 14
+    (14, 1): _read_ndc_main_14,
+    (14, 5): _read_ndc_aux_6,
+    (14, 7): _read_ndc_step_6,
+    (14, 18): _read_ndc_runinfo_14,
+    # ndax 15 - BTS9.x, needs more investigations
+    (15, 1): None,
+    # ndax 16
+    (16, 1): _read_ndc_main_16,
+    (16, 5): _read_ndc_aux_16,
+    (16, 7): _read_ndc_step_16,
+    (16, 18): _read_ndc_runinfo_16,
+    # ndax 17
+    (17, 1): _read_ndc_main_17,
+    (17, 5): _read_ndc_aux_6,
+    (17, 7): _read_ndc_step_17,
+    (17, 18): _read_ndc_runinfo_17,
 }
 
 # (version, filetype) keys confirmed against real data

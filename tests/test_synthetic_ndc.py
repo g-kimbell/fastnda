@@ -1,4 +1,4 @@
-"""Unit tests for ndax `_read_ndc_x_filetype_y` parsers.
+"""Unit tests for ndax `_read_ndc_{type}_x` parsers.
 
 Uses minimal synthetic byte buffers matching each struct's known layout and
 calls the reader function directly. Tests logic but does not confirm
@@ -203,7 +203,7 @@ class TestReadNdc1Filetype1:
             dtype, row_bytes, filetype=1, version=1, data_start_ind=5, record_size=512, use_bitmask=False
         )
 
-        df = ndax._read_ndc_1_filetype_1(buf)
+        df = ndax._read_ndc_main_1(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "cycle_count", [1, 1])
@@ -269,7 +269,7 @@ class TestReadNdc2Filetype1:
             dtype, row_bytes, filetype=1, version=2, data_start_ind=5, record_size=512, use_bitmask=False
         )
 
-        df = ndax._read_ndc_2_filetype_1(buf)
+        df = ndax._read_ndc_main_2(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "cycle_count", [1, 1])
@@ -314,7 +314,7 @@ class TestReadNdc2Filetype5:
             dtype, row_bytes, filetype=5, version=2, data_start_ind=5, record_size=512, use_bitmask=False
         )
 
-        df = ndax._read_ndc_2_filetype_5(buf)
+        df = ndax._read_ndc_aux_2(buf)
 
         _assert_col(df, "voltage_V", [3.6, 3.5])
         _assert_col(df, "temperature_degC", [25.0, 26.0])
@@ -373,7 +373,7 @@ class TestReadNdc5Filetype1:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=1, version=5)
 
-        df = ndax._read_ndc_5_filetype_1(buf)
+        df = ndax._read_ndc_main_5(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "cycle_count", [1, 1])
@@ -416,7 +416,7 @@ class TestReadNdc5Filetype5:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=5)
 
-        df = ndax._read_ndc_5_filetype_5(buf)
+        df = ndax._read_ndc_aux_5(buf)
 
         _assert_col(df, "voltage_V", [3.6, 3.5])
         _assert_col(df, "temperature_degC", [25.0, 26.0])
@@ -462,7 +462,7 @@ class TestReadNdc6Filetype1:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=1, version=6)
 
-        df = ndax._read_ndc_6_filetype_1(buf)
+        df = ndax._read_ndc_main_6(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "step_time_s", [10.0, 20.0])
@@ -513,7 +513,7 @@ class TestReadNdc8Filetype18:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=8)
 
-        df = ndax._read_ndc_8_filetype_18(buf)
+        df = ndax._read_ndc_runinfo_1(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [1.8, 0.0])
@@ -575,7 +575,7 @@ class TestReadNdc9Filetype5:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=9)
 
-        df = ndax._read_ndc_9_filetype_5(buf)
+        df = ndax._read_ndc_aux_9(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "cycle_count", [1, 1])
@@ -626,7 +626,7 @@ class TestReadNdc9Filetype18:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=9)
 
-        df = ndax._read_ndc_9_filetype_18(buf)
+        df = ndax._read_ndc_runinfo_2(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [1.8, 0.0])
@@ -678,7 +678,7 @@ class TestReadNdc13Filetype18:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=13)
 
-        df = ndax._read_ndc_13_filetype_18(buf)
+        df = ndax._read_ndc_runinfo_13(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [1.8, 0.0])
@@ -706,7 +706,7 @@ class TestReadNdc11Filetype1:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=1, version=11)
 
-        df = ndax._read_ndc_11_filetype_1(buf)
+        df = ndax._read_ndc_main_11(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "voltage_V", [3.6, 3.5])
@@ -741,7 +741,7 @@ class TestReadNdc11Filetype5:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=11)
 
-        df = ndax._read_ndc_11_filetype_5(buf)
+        df = ndax._read_ndc_aux_11(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "voltage_V", [3.6, 3.5])
@@ -760,7 +760,7 @@ class TestReadNdc11Filetype5:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=11)
 
-        df = ndax._read_ndc_11_filetype_5(buf)
+        df = ndax._read_ndc_aux_11(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "temperature_degC", [25.0, 26.0])
@@ -789,7 +789,7 @@ class TestReadNdc11Filetype7:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=7, version=11)
 
-        df = ndax._read_ndc_11_filetype_7(buf)
+        df = ndax._read_ndc_step_11(buf)
 
         _assert_col(df, "cycle_count", [1, 1])
         _assert_col(df, "step_index", [1, 2])
@@ -838,7 +838,7 @@ class TestReadNdc11Filetype18:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=11)
 
-        df = ndax._read_ndc_11_filetype_18(buf)
+        df = ndax._read_ndc_runinfo_11(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [0.5, 0.0])
@@ -864,7 +864,7 @@ class TestReadNdc14Filetype1:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=1, version=14)
 
-        df = ndax._read_ndc_14_filetype_1(buf)
+        df = ndax._read_ndc_main_14(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "voltage_V", [3.6, 3.5])
@@ -884,7 +884,7 @@ class TestReadNdc14Filetype5:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=14)
 
-        df = ndax._read_ndc_14_filetype_5(buf)
+        df = ndax._read_ndc_aux_6(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "?", [25.0, 26.0])
@@ -909,7 +909,7 @@ class TestReadNdc14Filetype7:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=7, version=14)
 
-        df = ndax._read_ndc_14_filetype_7(buf)
+        df = ndax._read_ndc_step_6(buf)
 
         _assert_col(df, "cycle_count", [1, 1])
         _assert_col(df, "step_index", [1, 2])
@@ -959,7 +959,7 @@ class TestReadNdc14Filetype18:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=14)
 
-        df = ndax._read_ndc_14_filetype_18(buf)
+        df = ndax._read_ndc_runinfo_14(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [1800.0, 0.0])
@@ -987,7 +987,7 @@ class TestReadNdc16Filetype1:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=1, version=16)
 
-        df = ndax._read_ndc_16_filetype_1(buf)
+        df = ndax._read_ndc_main_16(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "voltage_V", [3.6, 3.5])
@@ -1014,7 +1014,7 @@ class TestReadNdc16Filetype5:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=16)
 
-        df = ndax._read_ndc_16_filetype_5(buf)
+        df = ndax._read_ndc_aux_16(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "voltage_V", [3.6, 3.5])
@@ -1046,7 +1046,7 @@ class TestReadNdc16Filetype7:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=7, version=16)
 
-        df = ndax._read_ndc_16_filetype_7(buf)
+        df = ndax._read_ndc_step_16(buf)
 
         _assert_col(df, "cycle_count", [1, 1])
         _assert_col(df, "step_index", [1, 2])
@@ -1097,7 +1097,7 @@ class TestReadNdc16Filetype18:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=16)
 
-        df = ndax._read_ndc_16_filetype_18(buf)
+        df = ndax._read_ndc_runinfo_16(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [0.5, 0.0])
@@ -1132,7 +1132,7 @@ class TestReadNdc17Filetype7:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=7, version=17)
 
-        df = ndax._read_ndc_17_filetype_7(buf)
+        df = ndax._read_ndc_step_17(buf)
 
         _assert_col(df, "cycle_count", [1, 1])
         _assert_col(df, "step_index", [1, 2])
@@ -1182,7 +1182,7 @@ class TestReadNdc17Filetype18:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=17)
 
-        df = ndax._read_ndc_17_filetype_18(buf)
+        df = ndax._read_ndc_runinfo_17(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [1800.0, 0.0])
