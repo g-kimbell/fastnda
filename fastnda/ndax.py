@@ -48,13 +48,7 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
 
         # Extract and parse all of the .ndc files into dataframes in parallel
         files_to_read = ["data.ndc", "data_runInfo.ndc", "data_step.ndc", *aux_ch_dict.keys()]
-        dfs = {}
-        with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(_extract_and_bytes_to_df, zf, fname): fname for fname in files_to_read}
-            for future in as_completed(futures):
-                fname, df = future.result()
-                if df is not None:
-                    dfs[fname] = df
+        dfs = _read_ndc_files(zf, files_to_read)
 
     # Main data (voltage, current) is always called data.ndc
     df = dfs["data.ndc"]
@@ -87,6 +81,39 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
                 df = df.join(aux_df, how="left", on="index")
 
     return df
+
+
+def _read_ndc_files(zf: zipfile.ZipFile, files_to_read: list[str]) -> dict[str, pl.DataFrame]:
+    """Parallel read several ndc files from an open ndax zip.
+
+    Capture any unverified format warnings and collapse into a single warning.
+
+    Args:
+        zf: Open ndax zipfile.
+        files_to_read: Member filenames to extract and parse.
+
+    Returns:
+        Filename -> parsed DataFrame, for members that exist in the zip.
+
+    """
+    dfs = {}
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", UnverifiedFormatWarning)
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(_extract_and_bytes_to_df, zf, fname): fname for fname in files_to_read}
+            for future in as_completed(futures):
+                fname, df = future.result()
+                if df is not None:
+                    dfs[fname] = df
+
+    for w in caught:
+        if not issubclass(w.category, UnverifiedFormatWarning):
+            warnings.warn_explicit(w.message, w.category, w.filename, w.lineno)
+    unverified_messages = sorted({str(w.message) for w in caught if issubclass(w.category, UnverifiedFormatWarning)})
+    if unverified_messages:
+        warnings.warn("\n".join(unverified_messages), UnverifiedFormatWarning, stacklevel=3)
+
+    return dfs
 
 
 def read_ndax_metadata(file: str | Path) -> dict[str, str | float]:
