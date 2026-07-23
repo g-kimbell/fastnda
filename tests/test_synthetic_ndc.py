@@ -150,7 +150,7 @@ def _make_ndc_file(  # noqa: PLR0913
     return bytes(header) + bytes(block)
 
 
-class TestReadNdc1Filetype1:
+class TestReadNdcMain1:
     """DFDATA_V1 (ndc versions 1, 3): old-format container, record_size=512, no bitmask."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -215,7 +215,7 @@ class TestReadNdc1Filetype1:
         _assert_col(df, "step_count", [1, 2])
 
 
-class TestReadNdc2Filetype1:
+class TestReadNdcMain2:
     """DFDATA_V2 (ndc versions 2, 4): old-format container, record_size=512, no bitmask."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -281,7 +281,7 @@ class TestReadNdc2Filetype1:
         _assert_col(df, "step_count", [1, 2])
 
 
-class TestReadNdc2Filetype5:
+class TestReadNdcAux2:
     """DFDATA_V2 aux channel (ndc versions 2, 4): old-format container, voltage + 2 temperatures."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -321,7 +321,7 @@ class TestReadNdc2Filetype5:
         _assert_col(df, "temperature_setpoint_degC", [25.5, 25.5])
 
 
-class TestReadNdc5Filetype1:
+class TestReadNdcMain5:
     """DFDATA_V5 (ndc versions 5, 7): new-format container, bitmask-based."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -385,7 +385,7 @@ class TestReadNdc5Filetype1:
         _assert_col(df, "step_count", [1, 2])
 
 
-class TestReadNdc5Filetype5:
+class TestReadNdcAux5:
     """DFDATA_V5 aux channel (ndc versions 5, 7): new-format container, voltage + 2 temperatures."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -423,7 +423,7 @@ class TestReadNdc5Filetype5:
         _assert_col(df, "temperature_setpoint_degC", [25.5, 25.5])
 
 
-class TestReadNdc6Filetype1:
+class TestReadNdcMain6:
     """DFDATA_V6 (ndc version 6): main record already carries cumulative cap/energy, no runinfo file."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -474,7 +474,7 @@ class TestReadNdc6Filetype1:
         _assert_col(df, "step_count", [1, 2])
 
 
-class TestReadNdc8Filetype18:
+class TestReadNdcRunInfo8:
     """DFDATARunInfo_V8 (ndc version 8): new-format container, no wATimeMS field."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -524,7 +524,7 @@ class TestReadNdc8Filetype18:
         _assert_col(df, "index", [1, 2])
 
 
-class TestReadNdc9Filetype5:
+class TestReadNdcAux9:
     """DFDATA_V9 (ndc versions 9, 13, generic aux channel): new-format container, full record layout."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -587,7 +587,7 @@ class TestReadNdc9Filetype5:
         _assert_col(df, "step_count", [1, 2])
 
 
-class TestReadNdc9Filetype18:
+class TestReadNdcRunInfo9:
     """DFDATARunInfo_V9 (ndc version 9): new-format container, dwWorkType is 4 bytes (unlike v8's 1)."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -636,7 +636,7 @@ class TestReadNdc9Filetype18:
         _assert_col(df, "index", [1, 2])
 
 
-class TestReadNdc13Filetype18:
+class TestReadNdcRunInfo13:
     """DFDATARunInfo13 (ndc version 13): new-format container, adds fTotalCap/fTotalEng and wATimeMS."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -688,7 +688,7 @@ class TestReadNdc13Filetype18:
         _assert_col(df, "index", [1, 2])
 
 
-class TestReadNdc11Filetype1:
+class TestReadNdcMain11:
     """DFDATA (ndc versions 8, 9, 11, 12, 13): bare voltage/current float pair, add_index=True."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -713,7 +713,7 @@ class TestReadNdc11Filetype1:
         _assert_col(df, "current_mA", [200.0, -150.0])
 
 
-class TestReadNdc11Filetype5:
+class TestReadNdcAux11:
     """Aux channel (ndc version 11): dispatches on the first data byte between two sub-formats."""
 
     VOLTAGE_LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -766,7 +766,7 @@ class TestReadNdc11Filetype5:
         _assert_col(df, "temperature_degC", [25.0, 26.0])
 
 
-class TestReadNdc11Filetype7:
+class TestReadNdcStep11:
     """StepDFDATA (ndc versions 6, 8, 9, 11, 12, 13, 14): one row per step, step_count is row order."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -797,7 +797,7 @@ class TestReadNdc11Filetype7:
         _assert_col(df, "step_count", [1, 2])
 
 
-class TestReadNdc11Filetype18:
+class TestReadNdcRunInfo11:
     """DFDATARunInfo (ndc versions 11, 12): new-format container, with wATimeMS but no fTotalCap/Eng."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -848,7 +848,7 @@ class TestReadNdc11Filetype18:
         _assert_col(df, "index", [1, 2])
 
 
-class TestReadNdc14Filetype1:
+class TestReadNdcMain14:
     """DFDATA (ndc versions 8, 12, 14): bare voltage/current float pair, current scaled by 1000."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -871,7 +871,7 @@ class TestReadNdc14Filetype1:
         _assert_col(df, "current_mA", [200.0, -150.0])
 
 
-class TestReadNdc14Filetype5:
+class TestReadNdcAux14:
     """Generic aux channel (ndc versions 6, 8, 12, 14, 17): single value column, renamed later from TestInfo.xml."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [("?", "<f4")]
@@ -890,7 +890,7 @@ class TestReadNdc14Filetype5:
         _assert_col(df, "?", [25.0, 26.0])
 
 
-class TestReadNdc14Filetype7:
+class TestReadNdcStep14:
     """StepDFDATA (ndc versions 6, 8, 9, 11, 12, 13, 14): sequential step_count from int_range, not step_index."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -917,7 +917,7 @@ class TestReadNdc14Filetype7:
         _assert_col(df, "step_count", [1, 2])
 
 
-class TestReadNdc14Filetype18:
+class TestReadNdcRunInfo14:
     """DFDATARunInfo13-like struct (ndc version 14): uts_ms is signed, capacity/energy scaled *1000."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -969,7 +969,7 @@ class TestReadNdc14Filetype18:
         _assert_col(df, "index", [1, 2])
 
 
-class TestReadNdc16Filetype1:
+class TestReadNdcMain16:
     """DFDATA_V16-family main (ndc version 16): voltage/10000, current unscaled."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -994,7 +994,7 @@ class TestReadNdc16Filetype1:
         _assert_col(df, "current_mA", [200.0, -150.0])
 
 
-class TestReadNdc16Filetype5:
+class TestReadNdcAux16:
     """Aux channel (ndc version 16): only the 0x65 voltage+temperature sub-format is implemented."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -1021,7 +1021,7 @@ class TestReadNdc16Filetype5:
         _assert_col(df, "temperature_degC", [25.0, 26.0])
 
 
-class TestReadNdc16Filetype7:
+class TestReadNdcStep16:
     """StepDFDATA16 (ndc versions 16, 17): adds an explicit index field, step_count via count-changes."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -1055,7 +1055,7 @@ class TestReadNdc16Filetype7:
         _assert_col(df, "step_count", [1, 2])
 
 
-class TestReadNdc16Filetype18:
+class TestReadNdcRunInfo16:
     """DFDATARunInfo16 (ndc version 16): same as v11's runinfo but with a larger trailing pad."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -1107,40 +1107,7 @@ class TestReadNdc16Filetype18:
         _assert_col(df, "index", [1, 2])
 
 
-class TestReadNdc17Filetype7:
-    """StepDFDATA16 (ndc version 17): step_count is sequential row order, not from step_index."""
-
-    LAYOUT: ClassVar[list[tuple[str, str]]] = [
-        ("cycle_count", "<u4"),
-        ("step_index", "<u4"),
-        ("_pad1", "V16"),
-        ("step_type", "<u1"),
-        ("_pad2", "V8"),
-        ("step_count", "<u4"),
-        ("_pad3", "V63"),
-    ]
-    DEFAULTS: ClassVar[dict[str, int]] = {"cycle_count": 0}
-
-    def test_decodes_expected_values(self) -> None:
-        """Create synthetic ndc, read back, check against expected values."""
-        dtype = np.dtype(self.LAYOUT)
-        rows = _build_rows(
-            self.LAYOUT,
-            self.DEFAULTS,
-            columns={"step_index": [1, 2], "step_type": [1, 2]},
-        )
-        row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
-        buf = _make_ndc_file(dtype, row_bytes, filetype=7, version=17)
-
-        df = ndax._read_ndc_step_17(buf)
-
-        _assert_col(df, "cycle_count", [1, 1])
-        _assert_col(df, "step_index", [1, 2])
-        _assert_col(df, "step_type", [1, 2])
-        _assert_col(df, "step_count", [1, 2])
-
-
-class TestReadNdc17Filetype18:
+class TestReadNdcRunInfo17:
     """DFDATARunInfo16 (ndc version 17): capacity/energy scaled *1000, same struct as v16's runinfo."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
@@ -1201,10 +1168,10 @@ class TestUnverifiedFormatWarning:
 
     def test_warns_for_unverified_key(self) -> None:
         """Ndc version 1 filetype 1 (no real data) emits UnverifiedFormatWarning."""
-        dtype = np.dtype(TestReadNdc1Filetype1.LAYOUT)
+        dtype = np.dtype(TestReadNdcMain1.LAYOUT)
         rows = _build_rows(
-            TestReadNdc1Filetype1.LAYOUT,
-            TestReadNdc1Filetype1.DEFAULTS,
+            TestReadNdcMain1.LAYOUT,
+            TestReadNdcMain1.DEFAULTS,
             columns={
                 "index": [1],
                 "step_index": [1],
@@ -1228,10 +1195,10 @@ class TestUnverifiedFormatWarning:
 
     def test_no_warning_for_confirmed_key(self) -> None:
         """Ndc version 5 filetype 1 (has real data) emits no UnverifiedFormatWarning."""
-        dtype = np.dtype(TestReadNdc5Filetype1.LAYOUT)
+        dtype = np.dtype(TestReadNdcMain5.LAYOUT)
         rows = _build_rows(
-            TestReadNdc5Filetype1.LAYOUT,
-            TestReadNdc5Filetype1.DEFAULTS,
+            TestReadNdcMain5.LAYOUT,
+            TestReadNdcMain5.DEFAULTS,
             columns={
                 "index": [1],
                 "step_index": [1],
@@ -1262,10 +1229,10 @@ class TestUnverifiedFormatWarning:
         (data_step.ndc) file, both ndc version 6. Two internal warnings get merged into a
         single warning.
         """
-        main_dtype = np.dtype(TestReadNdc6Filetype1.LAYOUT)
+        main_dtype = np.dtype(TestReadNdcMain6.LAYOUT)
         main_rows = _build_rows(
-            TestReadNdc6Filetype1.LAYOUT,
-            TestReadNdc6Filetype1.DEFAULTS,
+            TestReadNdcMain6.LAYOUT,
+            TestReadNdcMain6.DEFAULTS,
             columns={
                 "step_time_s": [1000],
                 "voltage_V": [3.6],
@@ -1280,10 +1247,10 @@ class TestUnverifiedFormatWarning:
         )
         data_ndc = _make_ndc_file(main_dtype, [main_rows], filetype=1, version=6)
 
-        step_dtype = np.dtype(TestReadNdc11Filetype7.LAYOUT)
+        step_dtype = np.dtype(TestReadNdcStep11.LAYOUT)
         step_rows = _build_rows(
-            TestReadNdc11Filetype7.LAYOUT,
-            TestReadNdc11Filetype7.DEFAULTS,
+            TestReadNdcStep11.LAYOUT,
+            TestReadNdcStep11.DEFAULTS,
             columns={"step_index": [1], "step_type": [1]},
         )
         step_ndc = _make_ndc_file(step_dtype, [step_rows], filetype=7, version=6)
@@ -1309,10 +1276,10 @@ class TestUnverifiedFormatWarning:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Only UnverifiedFormatWarning gets combined, everything else passes through."""
-        main_dtype = np.dtype(TestReadNdc6Filetype1.LAYOUT)
+        main_dtype = np.dtype(TestReadNdcMain6.LAYOUT)
         main_rows = _build_rows(
-            TestReadNdc6Filetype1.LAYOUT,
-            TestReadNdc6Filetype1.DEFAULTS,
+            TestReadNdcMain6.LAYOUT,
+            TestReadNdcMain6.DEFAULTS,
             columns={
                 "step_time_s": [1000],
                 "voltage_V": [3.6],
