@@ -14,6 +14,7 @@ from polars.testing import assert_frame_equal, assert_series_equal
 
 import fastnda
 import fastnda.nda as _nda_module
+import fastnda.ndax as _ndax_module
 from fastnda.dicts import STEP_TYPE_MAP
 from fastnda.utils import _generate_cycle_number
 
@@ -450,4 +451,23 @@ class TestNdaVersionCoverage:
     def test_reader_called_with_real_data(self, reader_name: str, nda_reader_call_tracker: set[str]) -> None:
         """Confirm this reader function was actually invoked by TestRead's real-data reads."""
         if reader_name not in nda_reader_call_tracker:
+            pytest.xfail(f"{reader_name} was never tested with a real data file.")
+
+
+@pytest.fixture(scope="module", autouse=True)
+def ndc_reader_call_tracker() -> Generator[set[str], None, None]:
+    """Track which fastnda.ndax reader functions get called by real data in this module."""
+    yield from _instrument_reader_dict("fastnda.ndax", "NDC_READERS")
+
+
+_DISTINCT_NDC_READER_NAMES = sorted({r.__name__ for r in _ndax_module.NDC_READERS.values() if r is not None})
+
+
+class TestNdcVersionCoverage:
+    """Track which NDC reader functions are tested with real data."""
+
+    @pytest.mark.parametrize("reader_name", _DISTINCT_NDC_READER_NAMES)
+    def test_reader_called_with_real_data(self, reader_name: str, ndc_reader_call_tracker: set[str]) -> None:
+        """Confirm this reader function was actually invoked by TestRead's real-data reads."""
+        if reader_name not in ndc_reader_call_tracker:
             pytest.xfail(f"{reader_name} was never tested with a real data file.")
