@@ -519,8 +519,8 @@ class TestReadNdcRunInfo8:
         df = ndc_runinfo.read_ndc_runinfo_1(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
-        _assert_col(df, "charge_capacity_mAh", [1.8, 0.0])
-        _assert_col(df, "discharge_capacity_mAh", [0.0, 0.9])
+        _assert_col(df, "charge_capacity_mAh", [1800.0, 0.0])
+        _assert_col(df, "discharge_capacity_mAh", [0.0, 900.0])
         _assert_col(df, "dt", [10.0, 10.0])
         _assert_col(df, "unix_time_s", [1700000000, 1700000010])
         _assert_col(df, "step_count", [1, 2])
@@ -546,17 +546,20 @@ class TestReadNdcRunInfo9:
     DEFAULTS: ClassVar[dict[str, int]] = {}
 
     def test_decodes_expected_values(self) -> None:
-        """Create synthetic ndc, read back, check against expected values."""
+        """Create synthetic ndc, read back, check against expected values.
+
+        Raw capacity/energy is mAs|mWs and needs /3600 for mAh|mWh.
+        """
         dtype = np.dtype(self.LAYOUT)
         rows = _build_rows(
             self.LAYOUT,
             self.DEFAULTS,
             columns={
                 "step_time_s": [10000, 20000],
-                "charge_capacity_mAh": [1.8, 0.0],
-                "discharge_capacity_mAh": [0.0, 0.9],
-                "charge_energy_mWh": [3.6, 0.0],
-                "discharge_energy_mWh": [0.0, 1.8],
+                "charge_capacity_mAh": [1800.0, 0.0],
+                "discharge_capacity_mAh": [0.0, 900.0],
+                "charge_energy_mWh": [3600.0, 0.0],
+                "discharge_energy_mWh": [0.0, 1800.0],
                 "dt": [10000, 10000],
                 "unix_time_s": [1700000000, 1700000010],
                 "step_count": [1, 2],
@@ -569,8 +572,8 @@ class TestReadNdcRunInfo9:
         df = ndc_runinfo.read_ndc_runinfo_2(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
-        _assert_col(df, "charge_capacity_mAh", [1.8, 0.0])
-        _assert_col(df, "discharge_capacity_mAh", [0.0, 0.9])
+        _assert_col(df, "charge_capacity_mAh", [0.5, 0.0])
+        _assert_col(df, "discharge_capacity_mAh", [0.0, 0.25])
         _assert_col(df, "unix_time_s", [1700000000, 1700000010])
         _assert_col(df, "step_count", [1, 2])
         _assert_col(df, "index", [1, 2])
@@ -597,17 +600,20 @@ class TestReadNdcRunInfo13:
     DEFAULTS: ClassVar[dict[str, int]] = {}
 
     def test_decodes_expected_values(self) -> None:
-        """Create synthetic ndc, read back, check against expected values."""
+        """Create synthetic ndc, read back, check against expected values.
+
+        Raw capacity/energy is mAs|mWs and needs /3600 for mAh|mWh.
+        """
         dtype = np.dtype(self.LAYOUT)
         rows = _build_rows(
             self.LAYOUT,
             self.DEFAULTS,
             columns={
                 "step_time_s": [10000, 20000],
-                "charge_capacity_mAh": [1.8, 0.0],
-                "discharge_capacity_mAh": [0.0, 0.9],
-                "charge_energy_mWh": [3.6, 0.0],
-                "discharge_energy_mWh": [0.0, 1.8],
+                "charge_capacity_mAh": [1800.0, 0.0],
+                "discharge_capacity_mAh": [0.0, 900.0],
+                "charge_energy_mWh": [3600.0, 0.0],
+                "discharge_energy_mWh": [0.0, 1800.0],
                 "dt": [10000, 10000],
                 "unix_time_s": [1700000000, 1700000010],
                 "step_count": [1, 2],
@@ -621,8 +627,8 @@ class TestReadNdcRunInfo13:
         df = ndc_runinfo.read_ndc_runinfo_13(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
-        _assert_col(df, "charge_capacity_mAh", [1.8, 0.0])
-        _assert_col(df, "discharge_capacity_mAh", [0.0, 0.9])
+        _assert_col(df, "charge_capacity_mAh", [0.5, 0.0])
+        _assert_col(df, "discharge_capacity_mAh", [0.0, 0.25])
         _assert_col(df, "unix_time_s", [1700000000.5, 1700000010.25])
         _assert_col(df, "step_count", [1, 2])
         _assert_col(df, "index", [1, 2])
@@ -738,7 +744,7 @@ class TestReadNdcStep11:
 
 
 class TestReadNdcRunInfo11:
-    """DFDATARunInfo (ndc versions 11, 12): new-format container, with wATimeMS but no fTotalCap/Eng."""
+    """DFDATARunInfo (ndc version 11): new-format container, with wATimeMS but no fTotalCap/Eng."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("step_time_s", "<u4"),
@@ -783,6 +789,60 @@ class TestReadNdcRunInfo11:
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [0.5, 0.0])
         _assert_col(df, "discharge_capacity_mAh", [0.0, 0.25])
+        _assert_col(df, "unix_time_s", [1700000000.5, 1700000010.25])
+        _assert_col(df, "step_count", [1, 2])
+        _assert_col(df, "index", [1, 2])
+
+
+class TestReadNdcRunInfo12:
+    """DFDATARunInfo (ndc version 12): similar to 11 with different scaling."""
+
+    LAYOUT: ClassVar[list[tuple[str, str]]] = [
+        ("step_time_s", "<u4"),
+        ("_pad1", "V1"),
+        ("charge_capacity_mAh", "<f4"),
+        ("discharge_capacity_mAh", "<f4"),
+        ("charge_energy_mWh", "<f4"),
+        ("discharge_energy_mWh", "<f4"),
+        ("_pad2", "V8"),
+        ("dt", "<i4"),
+        ("unix_time_s", "<u4"),
+        ("step_count", "<u4"),
+        ("index", "<u4"),
+        ("uts_ms", "<u2"),
+    ]
+    DEFAULTS: ClassVar[dict[str, int]] = {}
+
+    def test_decodes_expected_values(self) -> None:
+        """Create synthetic ndc, read back, check against expected values.
+
+        Raw capacity/energy is Ah|Wh and needs *1000 for mAh|mWh.
+        """
+        dtype = np.dtype(self.LAYOUT)
+        rows = _build_rows(
+            self.LAYOUT,
+            self.DEFAULTS,
+            columns={
+                "step_time_s": [10000, 20000],
+                "charge_capacity_mAh": [1.8, 0.0],
+                "discharge_capacity_mAh": [0.0, 0.9],
+                "charge_energy_mWh": [3.6, 0.0],
+                "discharge_energy_mWh": [0.0, 1.8],
+                "dt": [10000, 10000],
+                "unix_time_s": [1700000000, 1700000010],
+                "step_count": [1, 2],
+                "index": [1, 2],
+                "uts_ms": [500, 250],
+            },
+        )
+        row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
+        buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=12)
+
+        df = ndc_runinfo.read_ndc_runinfo_12(buf)
+
+        _assert_col(df, "step_time_s", [10.0, 20.0])
+        _assert_col(df, "charge_capacity_mAh", [1800.0, 0.0])
+        _assert_col(df, "discharge_capacity_mAh", [0.0, 900.0])
         _assert_col(df, "unix_time_s", [1700000000.5, 1700000010.25])
         _assert_col(df, "step_count", [1, 2])
         _assert_col(df, "index", [1, 2])

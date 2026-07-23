@@ -78,7 +78,7 @@ _NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
     (12, 1): ndc_main.read_ndc_main_14,
     (12, 5): ndc_aux.read_ndc_aux_6,
     (12, 7): ndc_step.read_ndc_step_6,
-    (12, 18): ndc_runinfo.read_ndc_runinfo_11,
+    (12, 18): ndc_runinfo.read_ndc_runinfo_12,
     # ndax 13 - aux looks the same as 11, but is per-file-configurable
     (13, 1): ndc_main.read_ndc_main_11,
     (13, 5): ndc_aux.read_ndc_aux_11,

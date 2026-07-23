@@ -27,7 +27,9 @@ def read_ndc_runinfo_1(buf: bytes) -> pl.DataFrame:
         bytes_to_df(buf, dtype)
         .with_columns(
             [
-                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,  # ms -> s
+                pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
+                * 1000,  # Ah|Wh -> mAh|mWh
                 _count_changes(pl.col("step_count")).alias("step_count"),
             ]
         )
@@ -55,7 +57,9 @@ def read_ndc_runinfo_2(buf: bytes) -> pl.DataFrame:
         bytes_to_df(buf, dtype)
         .with_columns(
             [
-                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,  # ms -> s
+                pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
+                / 3600,  # mAs|mWs -> mAh|mWh
                 _count_changes(pl.col("step_count")).alias("step_count"),
             ]
         )
@@ -96,6 +100,40 @@ def read_ndc_runinfo_11(buf: bytes) -> pl.DataFrame:
     )
 
 
+def read_ndc_runinfo_12(buf: bytes) -> pl.DataFrame:
+    """v12 uses the same struct (NdcRunInfo) as v11, but v12 is "Plus"-family so needs v14's scaling."""
+    dtype = np.dtype(
+        [
+            ("step_time_s", "<u4"),
+            ("_pad1", "V1"),
+            ("charge_capacity_mAh", "<f4"),
+            ("discharge_capacity_mAh", "<f4"),
+            ("charge_energy_mWh", "<f4"),
+            ("discharge_energy_mWh", "<f4"),
+            ("_pad2", "V8"),
+            ("dt", "<i4"),
+            ("unix_time_s", "<u4"),
+            ("step_count", "<u4"),
+            ("index", "<u4"),
+            ("uts_ms", "<u2"),
+        ]
+    )
+    return (
+        bytes_to_df(buf, dtype)
+        .with_columns(
+            [
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,  # ms -> s
+                pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
+                * 1000,  # Ah|Wh -> mAh|mWh
+                (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
+                _count_changes(pl.col("step_count")).alias("step_count"),
+            ]
+        )
+        .drop("uts_ms")
+        .unique(subset="index", keep="first")
+    )
+
+
 def read_ndc_runinfo_13(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
@@ -118,7 +156,9 @@ def read_ndc_runinfo_13(buf: bytes) -> pl.DataFrame:
         bytes_to_df(buf, dtype)
         .with_columns(
             [
-                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,  # ms -> s
+                pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
+                / 3600,  # mAs|mWs -> mAh|mWh
                 (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
                 _count_changes(pl.col("step_count")).alias("step_count"),
             ]
