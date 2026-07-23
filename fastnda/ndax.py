@@ -964,10 +964,6 @@ def _read_ndc_runinfo_16(buf: bytes) -> pl.DataFrame:
     )
 
 
-def _read_ndc_main_17(buf: bytes) -> pl.DataFrame:
-    return _read_ndc_main_14(buf)
-
-
 def _read_ndc_step_17(buf: bytes) -> pl.DataFrame:
     dtype = np.dtype(
         [
@@ -1144,7 +1140,7 @@ NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
     (16, 7): _read_ndc_step_16,
     (16, 18): _read_ndc_runinfo_16,
     # ndax 17
-    (17, 1): _read_ndc_main_17,
+    (17, 1): _read_ndc_main_14,
     (17, 5): _read_ndc_aux_6,
     (17, 7): _read_ndc_step_17,
     (17, 18): _read_ndc_runinfo_17,
