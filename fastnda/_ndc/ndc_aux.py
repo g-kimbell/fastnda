@@ -4,7 +4,6 @@ import numpy as np
 import polars as pl
 
 from fastnda._ndc.ndc_utils import bytes_to_df
-from fastnda.utils import _count_changes
 
 
 def read_ndc_aux_2(buf: bytes) -> pl.DataFrame:
@@ -72,61 +71,6 @@ def read_ndc_aux_6(buf: bytes) -> pl.DataFrame:
         [
             pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("index"),
         ]
-    )
-
-
-def read_ndc_aux_9(buf: bytes) -> pl.DataFrame:
-    """Read ndc version 9 filetype 5. Also used for version 13."""
-    dtype = np.dtype(
-        [
-            ("_pad1", "V1"),
-            ("index", "<u4"),
-            ("cycle_count", "<u4"),
-            ("step_index", "<u2"),
-            ("step_type", "<u1"),
-            ("_pad2", "V5"),
-            ("step_time_s", "<u8"),
-            ("voltage_V", "<f4"),
-            ("current_mA", "<f4"),
-            ("_pad3", "V4"),
-            ("charge_capacity_mAh", "<i8"),
-            ("discharge_capacity_mAh", "<i8"),
-            ("charge_energy_mWh", "<i8"),
-            ("discharge_energy_mWh", "<i8"),
-            ("Y", "<u2"),
-            ("M", "<u1"),
-            ("D", "<u1"),
-            ("h", "<u1"),
-            ("m", "<u1"),
-            ("s", "<u1"),
-            ("_pad4", "V12"),  # fCurStepRange, nTotalTime
-        ]
-    )
-    return (
-        bytes_to_df(buf, dtype)
-        .with_columns(
-            [
-                pl.col("cycle_count") + 1,
-                pl.col("step_time_s").cast(pl.Float64) * 1e-3,
-                pl.col("voltage_V") * 1e-4,
-                pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
-                    "timestamp"
-                ),
-                _count_changes(pl.col("step_index")).alias("step_count"),
-            ]
-        )
-        .with_columns(
-            [
-                (
-                    pl.col(
-                        ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"],
-                    )
-                    / 3600
-                ).cast(pl.Float32),
-                (pl.col("timestamp").cast(pl.Float64) / 1e6).alias("unix_time_s"),
-            ]
-        )
-        .drop(["Y", "M", "D", "h", "m", "s"])
     )
 
 

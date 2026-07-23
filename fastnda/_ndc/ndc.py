@@ -63,9 +63,9 @@ _NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
     (8, 5): ndc_aux.read_ndc_aux_6,
     (8, 7): ndc_step.read_ndc_step_6,
     (8, 18): ndc_runinfo.read_ndc_runinfo_1,
-    # ndax 9
+    # ndax 9 - aux looks the same as 11, but is per-file-configurable
     (9, 1): ndc_main.read_ndc_main_11,
-    (9, 5): ndc_aux.read_ndc_aux_9,
+    (9, 5): ndc_aux.read_ndc_aux_11,
     (9, 7): ndc_step.read_ndc_step_6,
     (9, 18): ndc_runinfo.read_ndc_runinfo_2,
     # ndax 10 - probably never used
@@ -79,9 +79,9 @@ _NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
     (12, 5): ndc_aux.read_ndc_aux_6,
     (12, 7): ndc_step.read_ndc_step_6,
     (12, 18): ndc_runinfo.read_ndc_runinfo_11,
-    # ndax 13
+    # ndax 13 - aux looks the same as 11, but is per-file-configurable
     (13, 1): ndc_main.read_ndc_main_11,
-    (13, 5): ndc_aux.read_ndc_aux_9,
+    (13, 5): ndc_aux.read_ndc_aux_11,
     (13, 7): ndc_step.read_ndc_step_6,
     (13, 18): ndc_runinfo.read_ndc_runinfo_13,
     # ndax 14

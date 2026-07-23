@@ -527,69 +527,6 @@ class TestReadNdcRunInfo8:
         _assert_col(df, "index", [1, 2])
 
 
-class TestReadNdcAux9:
-    """DFDATA_V9 (ndc versions 9, 13, generic aux channel): new-format container, full record layout."""
-
-    LAYOUT: ClassVar[list[tuple[str, str]]] = [
-        ("_pad1", "V1"),
-        ("index", "<u4"),
-        ("cycle_count", "<u4"),
-        ("step_index", "<u2"),
-        ("step_type", "<u1"),
-        ("_pad2", "V5"),
-        ("step_time_s", "<u8"),
-        ("voltage_V", "<f4"),
-        ("current_mA", "<f4"),
-        ("_pad3", "V4"),
-        ("charge_capacity_mAh", "<i8"),
-        ("discharge_capacity_mAh", "<i8"),
-        ("charge_energy_mWh", "<i8"),
-        ("discharge_energy_mWh", "<i8"),
-        ("Y", "<u2"),
-        ("M", "<u1"),
-        ("D", "<u1"),
-        ("h", "<u1"),
-        ("m", "<u1"),
-        ("s", "<u1"),
-        ("_pad4", "V12"),
-    ]
-    DEFAULTS: ClassVar[dict[str, int]] = {"cycle_count": 0, "Y": 2024, "M": 1, "D": 1}
-
-    def test_decodes_expected_values(self) -> None:
-        """Create synthetic ndc, read back, check against expected values."""
-        dtype = np.dtype(self.LAYOUT)
-        rows = _build_rows(
-            self.LAYOUT,
-            self.DEFAULTS,
-            columns={
-                "index": [1, 2],
-                "step_index": [1, 2],
-                "step_type": [1, 2],
-                "step_time_s": [10000, 20000],
-                "voltage_V": [36000.0, 35000.0],
-                "current_mA": [200.0, -150.0],
-                "charge_capacity_mAh": [1800, 900],
-                "discharge_capacity_mAh": [0, 0],
-                "charge_energy_mWh": [3600, 1800],
-                "discharge_energy_mWh": [0, 0],
-                "s": [0, 10],
-            },
-        )
-        row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
-        buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=9)
-
-        df = ndc_aux.read_ndc_aux_9(buf)
-
-        _assert_col(df, "index", [1, 2])
-        _assert_col(df, "cycle_count", [1, 1])
-        _assert_col(df, "step_time_s", [10.0, 20.0])
-        _assert_col(df, "voltage_V", [3.6, 3.5])
-        _assert_col(df, "current_mA", [200.0, -150.0])
-        _assert_col(df, "charge_capacity_mAh", [0.5, 0.25])
-        _assert_col(df, "charge_energy_mWh", [1.0, 0.5])
-        _assert_col(df, "step_count", [1, 2])
-
-
 class TestReadNdcRunInfo9:
     """DFDATARunInfo_V9 (ndc version 9): new-format container, dwWorkType is 4 bytes (unlike v8's 1)."""
 
