@@ -55,9 +55,9 @@ _NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
     (6, 1): ndc_main.read_ndc_main_6,
     (6, 5): ndc_aux.read_ndc_aux_6,
     (6, 7): ndc_step.read_ndc_step_6,
-    # ndax 7
-    (7, 1): ndc_main.read_ndc_main_5,
-    (7, 5): ndc_aux.read_ndc_aux_5,
+    # ndax 7 - data has a per-file-configurable custom data path, would need more investigation
+    (7, 1): None,
+    (7, 5): None,
     # ndax 8
     (8, 1): ndc_main.read_ndc_main_14,
     (8, 5): ndc_aux.read_ndc_aux_6,
@@ -89,7 +89,7 @@ _NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
     (14, 5): ndc_aux.read_ndc_aux_6,
     (14, 7): ndc_step.read_ndc_step_6,
     (14, 18): ndc_runinfo.read_ndc_runinfo_14,
-    # ndax 15 - BTS9.x, needs more investigations
+    # ndax 15 - BTS9.x, needs more investigation
     (15, 1): None,
     # ndax 16
     (16, 1): ndc_main.read_ndc_main_16,
