@@ -10,6 +10,7 @@ Several scaling factors (voltage, current, capacity/energy, time, ...) for
 newly-added structs are currently best guesses, not confirmed with real data.
 """
 
+import importlib
 import struct
 import warnings
 import zipfile
@@ -21,7 +22,9 @@ import numpy as np
 import polars as pl
 import pytest
 
-from fastnda import ndax
+from fastnda._ndc import ndc_aux, ndc_main, ndc_runinfo, ndc_step, read_ndc
+from fastnda.ndax import read_ndax
+from fastnda.utils import UnverifiedFormatWarning
 
 # numpy dtype typestr -> struct module format char
 _TYPE_STRUCT = {
@@ -203,7 +206,7 @@ class TestReadNdcMain1:
             dtype, row_bytes, filetype=1, version=1, data_start_ind=5, record_size=512, use_bitmask=False
         )
 
-        df = ndax._read_ndc_main_1(buf)
+        df = ndc_main.read_ndc_main_1(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "cycle_count", [1, 1])
@@ -269,7 +272,7 @@ class TestReadNdcMain2:
             dtype, row_bytes, filetype=1, version=2, data_start_ind=5, record_size=512, use_bitmask=False
         )
 
-        df = ndax._read_ndc_main_2(buf)
+        df = ndc_main.read_ndc_main_2(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "cycle_count", [1, 1])
@@ -314,7 +317,7 @@ class TestReadNdcAux2:
             dtype, row_bytes, filetype=5, version=2, data_start_ind=5, record_size=512, use_bitmask=False
         )
 
-        df = ndax._read_ndc_aux_2(buf)
+        df = ndc_aux.read_ndc_aux_2(buf)
 
         _assert_col(df, "voltage_V", [3.6, 3.5])
         _assert_col(df, "temperature_degC", [25.0, 26.0])
@@ -373,7 +376,7 @@ class TestReadNdcMain5:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=1, version=5)
 
-        df = ndax._read_ndc_main_5(buf)
+        df = ndc_main.read_ndc_main_5(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "cycle_count", [1, 1])
@@ -416,7 +419,7 @@ class TestReadNdcAux5:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=5)
 
-        df = ndax._read_ndc_aux_5(buf)
+        df = ndc_aux.read_ndc_aux_5(buf)
 
         _assert_col(df, "voltage_V", [3.6, 3.5])
         _assert_col(df, "temperature_degC", [25.0, 26.0])
@@ -462,7 +465,7 @@ class TestReadNdcMain6:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=1, version=6)
 
-        df = ndax._read_ndc_main_6(buf)
+        df = ndc_main.read_ndc_main_6(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "step_time_s", [10.0, 20.0])
@@ -513,7 +516,7 @@ class TestReadNdcRunInfo8:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=8)
 
-        df = ndax._read_ndc_runinfo_1(buf)
+        df = ndc_runinfo.read_ndc_runinfo_1(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [1.8, 0.0])
@@ -575,7 +578,7 @@ class TestReadNdcAux9:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=9)
 
-        df = ndax._read_ndc_aux_9(buf)
+        df = ndc_aux.read_ndc_aux_9(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "cycle_count", [1, 1])
@@ -626,7 +629,7 @@ class TestReadNdcRunInfo9:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=9)
 
-        df = ndax._read_ndc_runinfo_2(buf)
+        df = ndc_runinfo.read_ndc_runinfo_2(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [1.8, 0.0])
@@ -678,7 +681,7 @@ class TestReadNdcRunInfo13:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=13)
 
-        df = ndax._read_ndc_runinfo_13(buf)
+        df = ndc_runinfo.read_ndc_runinfo_13(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [1.8, 0.0])
@@ -706,7 +709,7 @@ class TestReadNdcMain11:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=1, version=11)
 
-        df = ndax._read_ndc_main_11(buf)
+        df = ndc_main.read_ndc_main_11(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "voltage_V", [3.6, 3.5])
@@ -741,7 +744,7 @@ class TestReadNdcAux11:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=11)
 
-        df = ndax._read_ndc_aux_11(buf)
+        df = ndc_aux.read_ndc_aux_11(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "voltage_V", [3.6, 3.5])
@@ -760,7 +763,7 @@ class TestReadNdcAux11:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=11)
 
-        df = ndax._read_ndc_aux_11(buf)
+        df = ndc_aux.read_ndc_aux_11(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "temperature_degC", [25.0, 26.0])
@@ -789,7 +792,7 @@ class TestReadNdcStep11:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=7, version=11)
 
-        df = ndax._read_ndc_step_11(buf)
+        df = ndc_step.read_ndc_step_11(buf)
 
         _assert_col(df, "cycle_count", [1, 1])
         _assert_col(df, "step_index", [1, 2])
@@ -838,7 +841,7 @@ class TestReadNdcRunInfo11:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=11)
 
-        df = ndax._read_ndc_runinfo_11(buf)
+        df = ndc_runinfo.read_ndc_runinfo_11(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [0.5, 0.0])
@@ -864,7 +867,7 @@ class TestReadNdcMain14:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=1, version=14)
 
-        df = ndax._read_ndc_main_14(buf)
+        df = ndc_main.read_ndc_main_14(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "voltage_V", [3.6, 3.5])
@@ -884,7 +887,7 @@ class TestReadNdcAux14:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=14)
 
-        df = ndax._read_ndc_aux_6(buf)
+        df = ndc_aux.read_ndc_aux_6(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "?", [25.0, 26.0])
@@ -909,7 +912,7 @@ class TestReadNdcStep14:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=7, version=14)
 
-        df = ndax._read_ndc_step_6(buf)
+        df = ndc_step.read_ndc_step_6(buf)
 
         _assert_col(df, "cycle_count", [1, 1])
         _assert_col(df, "step_index", [1, 2])
@@ -959,7 +962,7 @@ class TestReadNdcRunInfo14:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=14)
 
-        df = ndax._read_ndc_runinfo_14(buf)
+        df = ndc_runinfo.read_ndc_runinfo_14(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [1800.0, 0.0])
@@ -987,7 +990,7 @@ class TestReadNdcMain16:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=1, version=16)
 
-        df = ndax._read_ndc_main_16(buf)
+        df = ndc_main.read_ndc_main_16(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "voltage_V", [3.6, 3.5])
@@ -1014,7 +1017,7 @@ class TestReadNdcAux16:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=5, version=16)
 
-        df = ndax._read_ndc_aux_16(buf)
+        df = ndc_aux.read_ndc_aux_16(buf)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "voltage_V", [3.6, 3.5])
@@ -1046,7 +1049,7 @@ class TestReadNdcStep16:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=7, version=16)
 
-        df = ndax._read_ndc_step_16(buf)
+        df = ndc_step.read_ndc_step_16(buf)
 
         _assert_col(df, "cycle_count", [1, 1])
         _assert_col(df, "step_index", [1, 2])
@@ -1097,7 +1100,7 @@ class TestReadNdcRunInfo16:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=16)
 
-        df = ndax._read_ndc_runinfo_16(buf)
+        df = ndc_runinfo.read_ndc_runinfo_16(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [0.5, 0.0])
@@ -1149,7 +1152,7 @@ class TestReadNdcRunInfo17:
         row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
         buf = _make_ndc_file(dtype, row_bytes, filetype=18, version=17)
 
-        df = ndax._read_ndc_runinfo_17(buf)
+        df = ndc_runinfo.read_ndc_runinfo_17(buf)
 
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "charge_capacity_mAh", [1800.0, 0.0])
@@ -1188,8 +1191,8 @@ class TestUnverifiedFormatWarning:
         )
         buf = _make_ndc_file(dtype, [rows], filetype=1, version=1, data_start_ind=5, record_size=512, use_bitmask=False)
 
-        with pytest.warns(ndax.UnverifiedFormatWarning, match="ndc version 1 filetype 1 "):
-            df = ndax._read_ndc(buf)
+        with pytest.warns(UnverifiedFormatWarning, match="ndc version 1 filetype 1 "):
+            df = read_ndc(buf)
 
         assert len(df) == 1
 
@@ -1217,9 +1220,9 @@ class TestUnverifiedFormatWarning:
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            df = ndax._read_ndc(buf)
+            df = read_ndc(buf)
 
-        assert not any(issubclass(w.category, ndax.UnverifiedFormatWarning) for w in caught)
+        assert not any(issubclass(w.category, UnverifiedFormatWarning) for w in caught)
         assert len(df) == 1
 
     def test_read_ndax_consolidates_warnings_from_multiple_unverified_files(self, tmp_path: Path) -> None:
@@ -1262,9 +1265,9 @@ class TestUnverifiedFormatWarning:
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            df = ndax.read_ndax(ndax_path)
+            df = read_ndax(ndax_path)
 
-        unverified = [w for w in caught if issubclass(w.category, ndax.UnverifiedFormatWarning)]
+        unverified = [w for w in caught if issubclass(w.category, UnverifiedFormatWarning)]
         assert len(unverified) == 1, (
             f"expected exactly one warning, got {len(unverified)}: {[str(w.message) for w in unverified]}"
         )
@@ -1297,20 +1300,27 @@ class TestUnverifiedFormatWarning:
         with zipfile.ZipFile(ndax_path, "w") as zf:
             zf.writestr("data.ndc", data_ndc)
 
-        original_read_ndc = ndax._read_ndc
+        # Resolve fastnda.ndax fresh via sys.modules rather than trusting this test file's own
+        # `from fastnda.ndax import read_ndax` binding - this environment's editable-install finder
+        # can re-import a module mid-session, leaving file-top bindings stale relative to what
+        # monkeypatch (and importlib.import_module) resolve as "the current module".
+        ndax_module = importlib.import_module("fastnda.ndax")
+        original_read_ndc = ndax_module.read_ndc
 
-        def _read_ndc_with_extra_warning(buf: bytes) -> pl.DataFrame:
+        def read_ndc_with_extra_warning(buf: bytes) -> pl.DataFrame:
             """Add extra warning to test if it passes through."""
             warnings.warn("some unrelated warning", RuntimeWarning, stacklevel=2)
             return original_read_ndc(buf)
 
-        monkeypatch.setattr(ndax, "_read_ndc", _read_ndc_with_extra_warning)
+        monkeypatch.setattr(ndax_module, "read_ndc", read_ndc_with_extra_warning)
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            df = ndax.read_ndax(ndax_path)
+            df = ndax_module.read_ndax(ndax_path)
 
         categories = [w.category for w in caught]
         assert RuntimeWarning in categories, "unrelated warning was silently swallowed"
-        assert ndax.UnverifiedFormatWarning in categories
+        # Compare against the class as fastnda.ndax itself resolves it, not this file's own
+        # (possibly stale) `from fastnda.utils import UnverifiedFormatWarning` binding.
+        assert ndax_module.UnverifiedFormatWarning in categories
         assert len(df) == 1

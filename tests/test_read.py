@@ -13,9 +13,9 @@ import pytest
 from polars.testing import assert_frame_equal, assert_series_equal
 
 import fastnda
-import fastnda.nda as _nda_module
-import fastnda.ndax as _ndax_module
+from fastnda._ndc.ndc import _CONFIRMED_NDC_KEYS, _NDC_READERS
 from fastnda.dicts import STEP_TYPE_MAP
+from fastnda.nda import _CONFIRMED_READER_NAMES, _NDA_READERS
 from fastnda.utils import _generate_cycle_number
 
 
@@ -412,6 +412,17 @@ class TestRead:
         assert "not understood" in caplog.text
 
 
+def _skip_unless_canonical_data_dir(data_dir: Path) -> None:
+    """Skip the calling test unless --data-dir points at the default tests/test_data corpus.
+
+    Confirmed-set drift checks only make sense against the full canonical corpus - a --data-dir
+    override for testing one file or a subset shouldn't make them fail (or falsely pass).
+    """
+    canonical_data_dir = Path(__file__).parent / "test_data"
+    if data_dir.resolve() != canonical_data_dir.resolve():
+        pytest.skip("--data-dir does not point at the default corpus - drift check is not meaningful here.")
+
+
 def _instrument_reader_dict(module_name: str, dict_attr: str) -> Generator[set[str], None, None]:
     """Wrap every entry of module_name.dict_attr to record which reader functions get called."""
     module = importlib.import_module(module_name)
@@ -438,10 +449,10 @@ def _instrument_reader_dict(module_name: str, dict_attr: str) -> Generator[set[s
 @pytest.fixture(scope="module", autouse=True)
 def nda_reader_call_tracker() -> Generator[set[str], None, None]:
     """Track which fastnda.nda reader functions get called by real data in this module."""
-    yield from _instrument_reader_dict("fastnda.nda", "NDA_READERS")
+    yield from _instrument_reader_dict("fastnda.nda", "_NDA_READERS")
 
 
-_DISTINCT_NDA_READER_NAMES = sorted({r.__name__ for r in _nda_module.NDA_READERS.values() if r is not None})
+_DISTINCT_NDA_READER_NAMES = sorted({r.__name__ for r in _NDA_READERS.values() if r is not None})
 
 
 class TestNdaVersionCoverage:
@@ -453,21 +464,89 @@ class TestNdaVersionCoverage:
         if reader_name not in nda_reader_call_tracker:
             pytest.xfail(f"{reader_name} was never tested with a real data file.")
 
+    def test_confirmed_reader_names_are_correct(self, data_dir: Path, nda_reader_call_tracker: set[str]) -> None:
+        """Check that _CONFIRMED_READER_NAMES matches real data.
+
+        Skips if --data-dir is used.
+        """
+        _skip_unless_canonical_data_dir(data_dir)
+        unbacked = _CONFIRMED_READER_NAMES - nda_reader_call_tracker
+        assert not unbacked, (
+            f"_CONFIRMED_READER_NAMES claims these reader functions are real-data-verified, but none "
+            f"of the real-data tests in this run actually called them: {sorted(unbacked)}"
+        )
+        newly_verified = nda_reader_call_tracker - _CONFIRMED_READER_NAMES
+        assert not newly_verified, (
+            f"These reader functions are now checked by real data but not yet in "
+            f"_CONFIRMED_READER_NAMES - add them so UnverifiedFormatWarning stops firing "
+            f"unnecessarily: {sorted(newly_verified)}"
+        )
+
+
+def _instrument_ndc_readers() -> Generator[set[tuple[tuple[int, int], str]], None, None]:
+    """Wrap every NDC_READERS entry to record which (key, reader name) pairs get called."""
+    module = importlib.import_module("fastnda._ndc.ndc")
+    reader_dict: dict = module._NDC_READERS
+    called: set[tuple[tuple[int, int], str]] = set()
+    original = dict(reader_dict)
+    for key, reader in original.items():
+        if reader is None:
+            continue
+        reader_name = reader.__name__
+
+        def wrapper(
+            *args: object, _reader: Callable = reader, _key: tuple[int, int] = key, _name: str = reader_name
+        ) -> object:
+            called.add((_key, _name))
+            return _reader(*args)
+
+        reader_dict[key] = wrapper
+    try:
+        yield called
+    finally:
+        reader_dict.clear()
+        reader_dict.update(original)
+
 
 @pytest.fixture(scope="module", autouse=True)
-def ndc_reader_call_tracker() -> Generator[set[str], None, None]:
-    """Track which fastnda.ndax reader functions get called by real data in this module."""
-    yield from _instrument_reader_dict("fastnda.ndax", "NDC_READERS")
+def ndc_reader_call_tracker() -> Generator[set[tuple[tuple[int, int], str]], None, None]:
+    """Track which fastnda.ndax (version, filetype) keys and reader functions get called by real data."""
+    yield from _instrument_ndc_readers()
 
 
-_DISTINCT_NDC_READER_NAMES = sorted({r.__name__ for r in _ndax_module.NDC_READERS.values() if r is not None})
+_DISTINCT_NDC_READER_NAMES = sorted({r.__name__ for r in _NDC_READERS.values() if r is not None})
 
 
 class TestNdcVersionCoverage:
     """Track which NDC reader functions are tested with real data."""
 
     @pytest.mark.parametrize("reader_name", _DISTINCT_NDC_READER_NAMES)
-    def test_reader_called_with_real_data(self, reader_name: str, ndc_reader_call_tracker: set[str]) -> None:
+    def test_reader_called_with_real_data(
+        self, reader_name: str, ndc_reader_call_tracker: set[tuple[tuple[int, int], str]]
+    ) -> None:
         """Confirm this reader function was actually invoked by TestRead's real-data reads."""
-        if reader_name not in ndc_reader_call_tracker:
+        called_names = {name for _, name in ndc_reader_call_tracker}
+        if reader_name not in called_names:
             pytest.xfail(f"{reader_name} was never tested with a real data file.")
+
+    def test_confirmed_keys_are_correct(
+        self, data_dir: Path, ndc_reader_call_tracker: set[tuple[tuple[int, int], str]]
+    ) -> None:
+        """Check that _CONFIRMED_NDC_KEYS matches real data.
+
+        Skips if --data-dir is used.
+        """
+        _skip_unless_canonical_data_dir(data_dir)
+        called_keys = {key for key, _ in ndc_reader_call_tracker}
+        unbacked = _CONFIRMED_NDC_KEYS - called_keys
+        assert not unbacked, (
+            f"_CONFIRMED_NDC_KEYS claims these (version, filetype) keys are real-data-verified, "
+            f"but none of the real-data tests in this run actually read a matching file: {sorted(unbacked)}"
+        )
+        called_keys = {key for key, _ in ndc_reader_call_tracker}
+        newly_verified = called_keys - _CONFIRMED_NDC_KEYS
+        assert not newly_verified, (
+            f"These (version, filetype) keys are now checked with real data but not yet in "
+            f"_CONFIRMED_NDC_KEYS - add them so UnverifiedFormatWarning stops firing "
+            f"unnecessarily: {sorted(newly_verified)}"
+        )
