@@ -2,6 +2,7 @@
 
 import logging
 import re
+import warnings
 import zipfile
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -15,7 +16,7 @@ from fastnda.dicts import (
     AUX_CHL_MAP,
     MULTIPLIER_MAP,
 )
-from fastnda.utils import _count_changes
+from fastnda.utils import UnverifiedFormatWarning, _count_changes
 
 try:
     import zlib
@@ -237,8 +238,74 @@ def _read_ndc(buf: bytes) -> pl.DataFrame:
     if reader is None:
         msg = f"ndc version {ndc_version} filetype {ndc_filetype} is not yet supported!"
         raise NotImplementedError(msg) from None
+    if (ndc_version, ndc_filetype) not in _CONFIRMED_NDC_KEYS:
+        warnings.warn(
+            f"ndc version {ndc_version} filetype {ndc_filetype} has not been verified against real Neware "
+            "data - results may be incorrect. If you can, please share a sample file at "
+            "https://github.com/empaeconversion/fastnda/issues so we can confirm this format.",
+            UnverifiedFormatWarning,
+            stacklevel=2,
+        )
     logger.debug("Reading ndc version %d filetype %d", ndc_version, ndc_filetype)
     return reader(buf)
+
+
+def _read_ndc_1_filetype_1(buf: bytes) -> pl.DataFrame:
+    """Read ndc version 1 filetype 1. Also used for version 3."""
+    dtype = np.dtype(
+        [
+            ("_pad1", "V8"),
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u1"),
+            ("step_type", "<u1"),
+            ("_pad2", "V2"),
+            ("step_time_s", "<u8"),
+            ("voltage_V", "<u4"),
+            ("current_mA", "<u4"),
+            ("_pad3", "V4"),
+            ("charge_capacity_mAh", "<i8"),
+            ("discharge_capacity_mAh", "<i8"),
+            ("charge_energy_mWh", "<i8"),
+            ("discharge_energy_mWh", "<i8"),
+            ("Y", "<u2"),
+            ("M", "<u1"),
+            ("D", "<u1"),
+            ("h", "<u1"),
+            ("m", "<u1"),
+            ("s", "<u1"),
+            ("range", "<i4"),
+        ]
+    )
+    return (
+        _bytes_to_df(buf, dtype, data_start_ind=5, record_size=512, use_bitmask=False)
+        .with_columns(
+            [
+                pl.col("cycle_count") + 1,
+                pl.col("step_time_s").cast(pl.Float64) * 1e-3,
+                pl.col("voltage_V").cast(pl.Float32) * 1e-4,
+                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
+                pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
+                    "timestamp"
+                ),
+                _count_changes(pl.col("step_index")).alias("step_count"),
+            ]
+        )
+        .with_columns(
+            [
+                pl.col("current_mA") * pl.col("multiplier"),
+                (
+                    pl.col(
+                        ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"],
+                    )
+                    * pl.col("multiplier")
+                    / 3600
+                ).cast(pl.Float32),
+                (pl.col("timestamp").cast(pl.Float64) / 1e6).alias("unix_time_s"),
+            ]
+        )
+        .drop(["Y", "M", "D", "h", "m", "s"])
+    )
 
 
 def _read_ndc_2_filetype_1(buf: bytes) -> pl.DataFrame:
@@ -410,6 +477,178 @@ def _read_ndc_5_filetype_5(buf: bytes) -> pl.DataFrame:
         if df.filter(pl.col(col) != 0).is_empty()
     ]
     return df.select(pl.exclude(cols_to_drop))
+
+
+def _read_ndc_6_filetype_1(buf: bytes) -> pl.DataFrame:
+    """Read ndc version 6 filetype 1.
+
+    v6's main record contains the capacity/energy/step fields.
+    Later versions split out into a separate runinfo file (filetype 18).
+    """
+    dtype = np.dtype(
+        [
+            ("step_time_s", "<u4"),
+            ("_pad1", "V1"),
+            ("voltage_V", "<f4"),
+            ("current_mA", "<f4"),
+            ("charge_capacity_mAh", "<f4"),
+            ("discharge_capacity_mAh", "<f4"),
+            ("charge_energy_mWh", "<f4"),
+            ("discharge_energy_mWh", "<f4"),
+            ("_pad2", "V1"),
+            ("unix_time_s", "<u4"),
+            ("step_count", "<u4"),
+        ]
+    )
+    return _bytes_to_df(buf, dtype, add_index=True).with_columns(
+        [
+            pl.col("step_time_s").cast(pl.Float64) / 1000,
+            pl.col("current_mA") * 1000,
+        ]
+    )
+
+
+def _read_ndc_9_filetype_5(buf: bytes) -> pl.DataFrame:
+    """Read ndc version 9 filetype 5. Also used for version 13."""
+    dtype = np.dtype(
+        [
+            ("_pad1", "V1"),
+            ("index", "<u4"),
+            ("cycle_count", "<u4"),
+            ("step_index", "<u2"),
+            ("step_type", "<u1"),
+            ("_pad2", "V5"),
+            ("step_time_s", "<u8"),
+            ("voltage_V", "<f4"),
+            ("current_mA", "<f4"),
+            ("_pad3", "V4"),
+            ("charge_capacity_mAh", "<i8"),
+            ("discharge_capacity_mAh", "<i8"),
+            ("charge_energy_mWh", "<i8"),
+            ("discharge_energy_mWh", "<i8"),
+            ("Y", "<u2"),
+            ("M", "<u1"),
+            ("D", "<u1"),
+            ("h", "<u1"),
+            ("m", "<u1"),
+            ("s", "<u1"),
+            ("_pad4", "V12"),  # fCurStepRange, nTotalTime
+        ]
+    )
+    return (
+        _bytes_to_df(buf, dtype)
+        .with_columns(
+            [
+                pl.col("cycle_count") + 1,
+                pl.col("step_time_s").cast(pl.Float64) * 1e-3,
+                pl.col("voltage_V") * 1e-4,
+                pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
+                    "timestamp"
+                ),
+                _count_changes(pl.col("step_index")).alias("step_count"),
+            ]
+        )
+        .with_columns(
+            [
+                (
+                    pl.col(
+                        ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"],
+                    )
+                    / 3600
+                ).cast(pl.Float32),
+                (pl.col("timestamp").cast(pl.Float64) / 1e6).alias("unix_time_s"),
+            ]
+        )
+        .drop(["Y", "M", "D", "h", "m", "s"])
+    )
+
+
+def _read_ndc_9_filetype_18(buf: bytes) -> pl.DataFrame:
+    dtype = np.dtype(
+        [
+            ("step_time_s", "<u4"),
+            ("_pad1", "V1"),
+            ("charge_capacity_mAh", "<f4"),
+            ("discharge_capacity_mAh", "<f4"),
+            ("charge_energy_mWh", "<f4"),
+            ("discharge_energy_mWh", "<f4"),
+            ("_pad2", "V8"),
+            ("dt", "<i4"),
+            ("unix_time_s", "<u4"),
+            ("step_count", "<u4"),
+            ("index", "<u4"),
+        ]
+    )
+    return (
+        _bytes_to_df(buf, dtype)
+        .with_columns(
+            [
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,
+                _count_changes(pl.col("step_count")).alias("step_count"),
+            ]
+        )
+        .unique(subset="index", keep="first")
+    )
+
+
+def _read_ndc_8_filetype_18(buf: bytes) -> pl.DataFrame:
+    dtype = np.dtype(
+        [
+            ("step_time_s", "<u4"),
+            ("_pad1", "V1"),
+            ("charge_capacity_mAh", "<f4"),
+            ("discharge_capacity_mAh", "<f4"),
+            ("charge_energy_mWh", "<f4"),
+            ("discharge_energy_mWh", "<f4"),
+            ("_pad2", "V5"),
+            ("dt", "<i4"),
+            ("unix_time_s", "<u4"),
+            ("step_count", "<u4"),
+            ("index", "<u4"),
+        ]
+    )
+    return (
+        _bytes_to_df(buf, dtype)
+        .with_columns(
+            [
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,
+                _count_changes(pl.col("step_count")).alias("step_count"),
+            ]
+        )
+        .unique(subset="index", keep="first")
+    )
+
+
+def _read_ndc_13_filetype_18(buf: bytes) -> pl.DataFrame:
+    dtype = np.dtype(
+        [
+            ("step_time_s", "<u4"),
+            ("_pad1", "V1"),
+            ("charge_capacity_mAh", "<f4"),
+            ("discharge_capacity_mAh", "<f4"),
+            ("charge_energy_mWh", "<f4"),
+            ("discharge_energy_mWh", "<f4"),
+            ("_pad2", "V8"),
+            ("dt", "<i4"),
+            ("unix_time_s", "<u4"),
+            ("step_count", "<u4"),
+            ("index", "<u4"),
+            ("uts_ms", "<u2"),
+            ("_pad3", "V8"),
+        ]
+    )
+    return (
+        _bytes_to_df(buf, dtype)
+        .with_columns(
+            [
+                pl.col("step_time_s", "dt").cast(pl.Float64) / 1000,
+                (pl.col("unix_time_s") + pl.col("uts_ms") / 1000).alias("unix_time_s"),
+                _count_changes(pl.col("step_count")).alias("step_count"),
+            ]
+        )
+        .drop("uts_ms")
+        .unique(subset="index", keep="first")
+    )
 
 
 def _read_ndc_11_filetype_1(buf: bytes) -> pl.DataFrame:
@@ -819,45 +1058,45 @@ def _bytes_to_df(
 
 # Map NDC (version, filetype) to handler functions
 NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
-    (1, 1): None,
+    (1, 1): _read_ndc_1_filetype_1,
     (2, 1): _read_ndc_2_filetype_1,
     (2, 5): _read_ndc_2_filetype_5,
-    (3, 1): None,
+    (3, 1): _read_ndc_1_filetype_1,
     (4, 1): _read_ndc_2_filetype_1,
     (4, 5): _read_ndc_2_filetype_5,
     (5, 1): _read_ndc_5_filetype_1,
     (5, 5): _read_ndc_5_filetype_5,
-    (6, 1): None,
-    (6, 5): None,
-    (6, 7): None,
+    (6, 1): _read_ndc_6_filetype_1,
+    (6, 5): _read_ndc_14_filetype_5,
+    (6, 7): _read_ndc_14_filetype_7,
     (7, 1): _read_ndc_5_filetype_1,
     (7, 5): _read_ndc_5_filetype_5,
-    (8, 1): None,
-    (8, 5): None,
-    (8, 7): None,
-    (8, 18): None,
-    (9, 1): None,
-    (9, 5): None,
-    (9, 7): None,
-    (9, 18): None,
+    (8, 1): _read_ndc_14_filetype_1,
+    (8, 5): _read_ndc_14_filetype_5,
+    (8, 7): _read_ndc_14_filetype_7,
+    (8, 18): _read_ndc_8_filetype_18,
+    (9, 1): _read_ndc_11_filetype_1,
+    (9, 5): _read_ndc_9_filetype_5,
+    (9, 7): _read_ndc_14_filetype_7,
+    (9, 18): _read_ndc_9_filetype_18,
     # 10 not used by Neware
     (11, 1): _read_ndc_11_filetype_1,
     (11, 5): _read_ndc_11_filetype_5,
     (11, 7): _read_ndc_11_filetype_7,
     (11, 18): _read_ndc_11_filetype_18,
-    (12, 1): None,
-    (12, 5): None,
-    (12, 7): None,
-    (12, 18): None,
-    (13, 1): None,
-    (13, 5): None,
-    (13, 7): None,
-    (13, 18): None,
+    (12, 1): _read_ndc_14_filetype_1,
+    (12, 5): _read_ndc_14_filetype_5,
+    (12, 7): _read_ndc_14_filetype_7,
+    (12, 18): _read_ndc_11_filetype_18,
+    (13, 1): _read_ndc_11_filetype_1,
+    (13, 5): _read_ndc_9_filetype_5,
+    (13, 7): _read_ndc_14_filetype_7,
+    (13, 18): _read_ndc_13_filetype_18,
     (14, 1): _read_ndc_14_filetype_1,
     (14, 5): _read_ndc_14_filetype_5,
     (14, 7): _read_ndc_14_filetype_7,
     (14, 18): _read_ndc_14_filetype_18,
-    (15, 1): None,
+    (15, 1): None,  # BTS9.x needs more investigations
     (16, 1): _read_ndc_16_filetype_1,
     (16, 5): _read_ndc_16_filetype_5,
     (16, 7): _read_ndc_16_filetype_7,
@@ -867,3 +1106,29 @@ NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
     (17, 7): _read_ndc_17_filetype_7,
     (17, 18): _read_ndc_17_filetype_18,
 }
+
+# (version, filetype) keys confirmed against real data
+_CONFIRMED_NDC_KEYS = frozenset(
+    {
+        (2, 1),
+        (2, 5),
+        (5, 1),
+        (5, 5),
+        (11, 1),
+        (11, 5),
+        (11, 7),
+        (11, 18),
+        (14, 1),
+        (14, 5),
+        (14, 7),
+        (14, 18),
+        (16, 1),
+        (16, 5),
+        (16, 7),
+        (16, 18),
+        (17, 1),
+        (17, 5),
+        (17, 7),
+        (17, 18),
+    },
+)
