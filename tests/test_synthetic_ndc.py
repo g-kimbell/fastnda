@@ -1318,3 +1318,43 @@ class TestUnverifiedFormatWarning:
         # (possibly stale) `from fastnda.utils import UnverifiedFormatWarning` binding.
         assert ndax_module.UnverifiedFormatWarning in categories
         assert len(df) == 1
+
+
+class TestReadNdaxAuxScaling:
+    """read_ndax() applies AUX_CHL_SCALE_MAP when merging a generic ('?') aux channel."""
+
+    def test_current_aux_channel_is_scaled_a_to_ma(self, tmp_path: Path) -> None:
+        """A ChlType=104 (current) aux channel is renamed to current_mA and scaled A -> mA."""
+        main_dtype = np.dtype(TestReadNdcMain14.LAYOUT)
+        main_rows = _build_rows(
+            TestReadNdcMain14.LAYOUT,
+            TestReadNdcMain14.DEFAULTS,
+            columns={"voltage_V": [3.6, 3.7], "current_mA": [0.2, 0.2]},
+        )
+        main_row_bytes = [main_rows[i * main_dtype.itemsize : (i + 1) * main_dtype.itemsize] for i in range(2)]
+        data_ndc = _make_ndc_file(main_dtype, main_row_bytes, filetype=1, version=6)
+
+        # ndc version 14 filetype 5 gives one "?" column that looksup the AUX_CHL_MAP and scales
+        aux_dtype = np.dtype(TestReadNdcAux14.LAYOUT)
+        aux_rows = _build_rows(TestReadNdcAux14.LAYOUT, TestReadNdcAux14.DEFAULTS, columns={"?": [0.05, -0.03]})
+        aux_row_bytes = [aux_rows[i * aux_dtype.itemsize : (i + 1) * aux_dtype.itemsize] for i in range(2)]
+        aux_ndc = _make_ndc_file(aux_dtype, aux_row_bytes, filetype=5, version=14)
+
+        # ChlType 104 = current, AUX_CHL_SCALE_MAP scales it A->mA.
+        test_info_xml = (
+            '<?xml version="1.0" encoding="gb2312"?>'
+            "<root><config><TestInfo>"
+            '<AuxChl_1 ChlType="104" AuxID="1"/>'
+            "</TestInfo></config></root>"
+        )
+
+        ndax_path = tmp_path / "synthetic.ndax"
+        with zipfile.ZipFile(ndax_path, "w") as zf:
+            zf.writestr("data.ndc", data_ndc)
+            zf.writestr("data_AUX_1_1_1.ndc", aux_ndc)
+            zf.writestr("TestInfo.xml", test_info_xml.encode("gb2312"))
+
+        df = read_ndax(ndax_path)
+
+        assert "?" not in df.columns
+        _assert_col(df, "aux1_current_mA", [50.0, -30.0])
