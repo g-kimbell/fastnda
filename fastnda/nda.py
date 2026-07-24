@@ -11,13 +11,9 @@ import numpy as np
 import polars as pl
 
 from fastnda.dicts import MULTIPLIER_MAP
-from fastnda.utils import _count_changes
+from fastnda.utils import UnverifiedFormatWarning, _count_changes
 
 logger = logging.getLogger(__name__)
-
-
-class UnverifiedFormatWarning(UserWarning):
-    """Raised when reading an nda_version which hasn't been tested against real data."""
 
 
 def read_nda(file: str | Path) -> pl.DataFrame:
@@ -194,7 +190,7 @@ def _merge_aux(
 def _read_nda(mm: mmap.mmap) -> pl.DataFrame:
     """Figure out nda version and pass to correct reader."""
     nda_version = int(mm[14])
-    reader = NDA_READERS.get(nda_version)
+    reader = _NDA_READERS.get(nda_version)
     if reader is None:
         msg = f"nda version {nda_version} is not yet supported!"
         raise NotImplementedError(msg) from None
@@ -842,7 +838,7 @@ def _read_nda_130_90(mm: mmap.mmap) -> pl.DataFrame:
 
 
 # NDA FileVer code -> struct type reader
-NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
+_NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
     1: _read_nda_1,
     2: _read_nda_2,  # Deprecated by Neware
     3: _read_nda_3,
@@ -879,5 +875,5 @@ NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
 # Reader functions confirmed against real data
 _CONFIRMED_READER_NAMES = frozenset({"_read_nda_5", "_read_nda_14", "_read_nda_29", "_read_nda_130"})
 _CONFIRMED_NDA_VERSIONS = frozenset(
-    version for version, reader in NDA_READERS.items() if reader.__name__ in _CONFIRMED_READER_NAMES
+    version for version, reader in _NDA_READERS.items() if reader.__name__ in _CONFIRMED_READER_NAMES
 )

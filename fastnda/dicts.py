@@ -120,12 +120,35 @@ MULTIPLIER_MAP = MappingProxyType(
     }
 )
 
-# Auxiliary column names based on ChlType
 AUX_CHL_MAP = MappingProxyType(
     {
-        103: "temperature_degC",
+        102: "voltage_V",  # aux voltage
+        103: "temperature_degC",  # aux temp
+        104: "current_mA",  # aux current in A, gets scaled
+        105: "voltage_V",  # 'mult' voltage
+        106: "temperature_degC",  # 'mult' temp
+        107: "current_mA",  # 'mult' curr in A
+        108: "clamp_temperature_degC",  # 'clamp temp'
+        109: "clamp_weight_kg",  # 'clamp press'
+        110: "clamp_air_pressure_kPa",  # 'clamp air press'
+        111: "leader_temperature_degC",  # 'leader temp'
+        112: "red_temperature_degC",  # 'red temp'
+        113: "humidity",  # not sure of unit
+        114: "thickness_mm",
+        115: "flow",  # not sure of unit
+        116: "voc",  # not sure what this is or what the unit is
+        117: "pressure_bar",  # not sure what this relates to
+        118: "force_N",  # not sure what this relates to
         335: "temperature_setpoint_degC",
         345: "humidity_%",
+    }
+)
+
+# Scalings applied to AUX_CHL_MAP
+AUX_CHL_SCALE_MAP = MappingProxyType(
+    {
+        104: 1000,  # A -> mA
+        107: 1000,  # A -> mA
     }
 )
 
