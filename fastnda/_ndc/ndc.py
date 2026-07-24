@@ -1,4 +1,4 @@
-"""Module to read all Neware NDC files."""
+"""Private module to read all Neware NDC files."""
 
 import logging
 import warnings

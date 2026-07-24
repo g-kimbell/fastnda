@@ -1,4 +1,7 @@
-"""bytes_to_df function used by all ndc readers."""
+"""Private functions shared by all ndc readers.
+
+Do not use these methods directly, they may change any time without warning.
+"""
 
 import numpy as np
 import polars as pl

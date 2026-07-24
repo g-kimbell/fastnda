@@ -1,4 +1,7 @@
-"""Module to read Neware 'aux' NDC files."""
+"""Private module to read Neware 'aux' NDC files.
+
+Do not use these methods directly, they may change any time without warning.
+"""
 
 import numpy as np
 import polars as pl
