@@ -715,37 +715,6 @@ class TestReadNdcAux11:
         _assert_col(df, "temperature_degC", [25.0, 26.0])
 
 
-class TestReadNdcStep11:
-    """StepDFDATA (ndc versions 6, 8, 9, 11, 12, 13, 14): one row per step, step_count is row order."""
-
-    LAYOUT: ClassVar[list[tuple[str, str]]] = [
-        ("cycle_count", "<u4"),
-        ("step_index", "<u4"),
-        ("_pad1", "V16"),
-        ("step_type", "<u1"),
-        ("_pad2", "V12"),
-    ]
-    DEFAULTS: ClassVar[dict[str, int]] = {"cycle_count": 0}
-
-    def test_decodes_expected_values(self) -> None:
-        """Create synthetic ndc, read back, check against expected values."""
-        dtype = np.dtype(self.LAYOUT)
-        rows = _build_rows(
-            self.LAYOUT,
-            self.DEFAULTS,
-            columns={"step_index": [1, 2], "step_type": [1, 2]},
-        )
-        row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
-        buf = _make_ndc_file(dtype, row_bytes, filetype=7, version=11)
-
-        df = ndc_step.read_ndc_step_11(buf)
-
-        _assert_col(df, "cycle_count", [1, 1])
-        _assert_col(df, "step_index", [1, 2])
-        _assert_col(df, "step_type", [1, 2])
-        _assert_col(df, "step_count", [1, 2])
-
-
 class TestReadNdcRunInfo11:
     """DFDATARunInfo (ndc version 11): new-format container, with wATimeMS but no fTotalCap/Eng."""
 
@@ -1228,40 +1197,64 @@ class TestUnverifiedFormatWarning:
     def test_read_ndax_consolidates_warnings_from_multiple_unverified_files(self, tmp_path: Path) -> None:
         """A single ndax with several unverified .ndc members should still only warn once.
 
-        Builds a synthetic .ndax with an unverified main (data.ndc) and an unverified step
-        (data_step.ndc) file, both ndc version 6. Two internal warnings get merged into a
-        single warning.
+        Builds a synthetic .ndax with an unverified main, verified step, unverified runInfo.
+        Two internal warnings get merged into a single warning.
         """
         main_dtype = np.dtype(TestReadNdcMain6.LAYOUT)
         main_rows = _build_rows(
             TestReadNdcMain6.LAYOUT,
             TestReadNdcMain6.DEFAULTS,
             columns={
-                "step_time_s": [1000],
-                "voltage_V": [3.6],
-                "current_mA": [0.5],
-                "charge_capacity_mAh": [1.0],
-                "discharge_capacity_mAh": [0.0],
-                "charge_energy_mWh": [3.6],
-                "discharge_energy_mWh": [0.0],
-                "unix_time_s": [1700000000],
-                "step_count": [1],
+                "step_time_s": [1000, 2000],
+                "voltage_V": [3.6, 3.7],
+                "current_mA": [0.5, 0.5],
+                "charge_capacity_mAh": [1.0, 1.1],
+                "discharge_capacity_mAh": [0.0, 0.0],
+                "charge_energy_mWh": [3.6, 3.7],
+                "discharge_energy_mWh": [0.0, 0.0],
+                "unix_time_s": [1700000000, 1700001000],
+                "step_count": [1, 1],
             },
         )
-        data_ndc = _make_ndc_file(main_dtype, [main_rows], filetype=1, version=6)
+        main_row_bytes = [main_rows[i * main_dtype.itemsize : (i + 1) * main_dtype.itemsize] for i in range(2)]
+        data_ndc = _make_ndc_file(main_dtype, main_row_bytes, filetype=1, version=6)
 
-        step_dtype = np.dtype(TestReadNdcStep11.LAYOUT)
-        step_rows = _build_rows(
-            TestReadNdcStep11.LAYOUT,
-            TestReadNdcStep11.DEFAULTS,
-            columns={"step_index": [1], "step_type": [1]},
+        runinfo_dtype = np.dtype(TestReadNdcRunInfo13.LAYOUT)
+        runinfo_rows = _build_rows(
+            TestReadNdcRunInfo13.LAYOUT,
+            TestReadNdcRunInfo13.DEFAULTS,
+            columns={
+                "step_time_s": [10000, 20000],
+                "charge_capacity_mAh": [1800.0, 0.0],
+                "discharge_capacity_mAh": [0.0, 900.0],
+                "charge_energy_mWh": [3600.0, 0.0],
+                "discharge_energy_mWh": [0.0, 1800.0],
+                "dt": [10000, 10000],
+                "unix_time_s": [1700000000, 1700001000],
+                "step_count": [1, 1],
+                "index": [1, 2],
+                "uts_ms": [500, 250],
+            },
         )
-        step_ndc = _make_ndc_file(step_dtype, [step_rows], filetype=7, version=6)
+        runinfo_row_bytes = [
+            runinfo_rows[i * runinfo_dtype.itemsize : (i + 1) * runinfo_dtype.itemsize] for i in range(2)
+        ]
+        runinfo_ndc = _make_ndc_file(runinfo_dtype, runinfo_row_bytes, filetype=18, version=13)
+
+        step_dtype = np.dtype(TestReadNdcStep14.LAYOUT)
+        step_rows = _build_rows(
+            TestReadNdcStep14.LAYOUT,
+            TestReadNdcStep14.DEFAULTS,
+            columns={"step_index": [1, 1], "step_type": [1, 1]},
+        )
+        step_row_bytes = [step_rows[i * step_dtype.itemsize : (i + 1) * step_dtype.itemsize] for i in range(2)]
+        step_ndc = _make_ndc_file(step_dtype, step_row_bytes, filetype=7, version=14)
 
         ndax_path = tmp_path / "synthetic.ndax"
         with zipfile.ZipFile(ndax_path, "w") as zf:
             zf.writestr("data.ndc", data_ndc)
             zf.writestr("data_step.ndc", step_ndc)
+            zf.writestr("data_runInfo.ndc", runinfo_ndc)
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
@@ -1272,8 +1265,9 @@ class TestUnverifiedFormatWarning:
             f"expected exactly one warning, got {len(unverified)}: {[str(w.message) for w in unverified]}"
         )
         assert "ndc version 6 filetype 1 " in str(unverified[0].message)
-        assert "ndc version 6 filetype 7 " in str(unverified[0].message)
-        assert len(df) == 1
+        assert "ndc version 14 filetype 7 " not in str(unverified[0].message)
+        assert "ndc version 13 filetype 18 " in str(unverified[0].message)
+        assert len(df) == 2
 
     def test_read_ndax_does_not_swallow_unrelated_warnings(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

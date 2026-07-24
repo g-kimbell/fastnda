@@ -72,7 +72,7 @@ _NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
     # ndax 11
     (11, 1): ndc_main.read_ndc_main_11,
     (11, 5): ndc_aux.read_ndc_aux_11,
-    (11, 7): ndc_step.read_ndc_step_11,
+    (11, 7): ndc_step.read_ndc_step_6,
     (11, 18): ndc_runinfo.read_ndc_runinfo_11,
     # ndax 12
     (12, 1): ndc_main.read_ndc_main_14,
