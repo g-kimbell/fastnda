@@ -205,8 +205,10 @@ def read_ndc_main_6(buf: bytes) -> pl.DataFrame:
     )
     return bytes_to_df(buf, dtype, add_index=True).with_columns(
         [
-            pl.col("step_time_s").cast(pl.Float64) / 1000,
-            pl.col("current_mA") * 1000,
+            pl.col("step_time_s").cast(pl.Float64) / 1000,  # ms -> s
+            pl.col("current_mA") * 1000,  # A -> mA
+            pl.col("charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh")
+            * 1000,  # Ah|Wh -> mAh|mWh
         ]
     )
 

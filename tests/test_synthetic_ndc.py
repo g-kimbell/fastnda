@@ -445,7 +445,10 @@ class TestReadNdcMain6:
     DEFAULTS: ClassVar[dict[str, int]] = {}
 
     def test_decodes_expected_values(self) -> None:
-        """Create synthetic ndc, read back, check against expected values."""
+        """Create synthetic ndc, read back, check against expected values.
+
+        Raw capacity/energy is Ah|Wh and needs *1000 for mAh|mWh.
+        """
         dtype = np.dtype(self.LAYOUT)
         rows = _build_rows(
             self.LAYOUT,
@@ -471,8 +474,8 @@ class TestReadNdcMain6:
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "voltage_V", [3.6, 3.5])
         _assert_col(df, "current_mA", [200.0, -150.0])
-        _assert_col(df, "charge_capacity_mAh", [1.8, 0.0])
-        _assert_col(df, "discharge_capacity_mAh", [0.0, 0.9])
+        _assert_col(df, "charge_capacity_mAh", [1800.0, 0.0])
+        _assert_col(df, "discharge_capacity_mAh", [0.0, 900.0])
         _assert_col(df, "unix_time_s", [1700000000, 1700000010])
         _assert_col(df, "step_count", [1, 2])
 
