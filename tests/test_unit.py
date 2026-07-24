@@ -4,6 +4,7 @@ import mmap
 
 import polars as pl
 
+from fastnda import step_type_map  # noqa: F401, ensure import works
 from fastnda.nda import _merge_aux, _read_nda_130_91
 
 
