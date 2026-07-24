@@ -55,9 +55,10 @@ def bytes_to_df(
 
     # Slice the data
     data_end_ind = data_start_ind + dtype.itemsize * rows_per_record
-    data = np.ascontiguousarray(arr[:, data_start_ind:data_end_ind]).view(dtype_no_pad).ravel()
+    sliced = arr[:, data_start_ind:data_end_ind].view(dtype_no_pad)
+    columns = {name: np.ascontiguousarray(sliced[name]).ravel() for name in dtype_no_pad.names}
 
-    df = pl.DataFrame(data)
+    df = pl.DataFrame(columns)
 
     if not use_bitmask:
         return df.filter(pl.col("index") != 0)
