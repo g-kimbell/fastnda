@@ -13,7 +13,7 @@
 Python and command-line tool to read Neware .nda and .ndax files fast.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/6c6db9a1-e36d-4105-b953-306bba6c916d" width="500" align="center" alt="Aurora cycler manager">
+  <img src="https://github.com/user-attachments/assets/0ac3e5dd-1905-4c4b-937e-4e4663c866d9" width="500" align="center">
 </p>
 <p align="center">
   Time to convert a ~100 MB, 1.3-million-row .ndax file to .csv. Best of three runs.<br>1) Cold start from command-line interface, including module imports.<br>2) Processing time only, without UI navigation.
