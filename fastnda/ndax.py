@@ -11,7 +11,7 @@ import polars as pl
 from defusedxml import ElementTree
 
 from fastnda._ndc import read_ndc
-from fastnda.dicts import AUX_CHL_MAP
+from fastnda.dicts import AUX_CHL_MAP, AUX_CHL_SCALE_MAP
 from fastnda.utils import UnverifiedFormatWarning
 
 try:
@@ -65,9 +65,13 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
             # Get aux ID, use -i if not present to avoid conflicts
             aux_id = aux_dict.get("AuxID", -i)
 
-            # If ? column exists, rename name by ChlType (T, t, H)
+            # If ? column exists, rename name by ChlType (T, t, H), scaling the value if needed
             if "?" in aux_df.columns and aux_dict.get("ChlType") in AUX_CHL_MAP:
-                col = AUX_CHL_MAP[aux_dict["ChlType"]]
+                chltype = aux_dict["ChlType"]
+                col = AUX_CHL_MAP[chltype]
+                scale = AUX_CHL_SCALE_MAP.get(chltype, 1)
+                if scale != 1:
+                    aux_df = aux_df.with_columns(pl.col("?") * scale)
                 aux_df = aux_df.rename({"?": f"aux{aux_id}_{col}"})
             else:  # Otherwise just append aux ID to column names
                 aux_df = aux_df.rename({col: f"aux{aux_id}_{col}" for col in aux_df.columns if col not in ["index"]})
