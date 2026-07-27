@@ -12,10 +12,10 @@ import fastnda
 @pytest.fixture
 def fastnda_no_isal(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     """Simulate isal not being installed."""
-    # Remove fastnda + isal from cache
+    # Remove fastnda + isal from cache via monkeypatch
     to_remove = [key for key in sys.modules if key in {"isal", "fastnda"} or key.startswith(("isal.", "fastnda."))]
     for module in to_remove:
-        sys.modules.pop(module, None)
+        monkeypatch.delitem(sys.modules, module, raising=False)
 
     # Remove isal from sys.modules
     monkeypatch.setitem(sys.modules, "isal", None)
