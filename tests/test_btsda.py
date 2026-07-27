@@ -6,7 +6,8 @@ from tempfile import TemporaryDirectory
 import polars as pl
 from polars.testing import assert_frame_equal
 
-from fastnda.btsda import _time_str_to_float, btsda_csv_to_parquet
+from fastnda import btsda_csv_to_parquet
+from fastnda.btsda import _time_str_to_float
 
 
 class TestBTSDA:

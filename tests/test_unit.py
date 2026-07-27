@@ -3,8 +3,18 @@
 import mmap
 
 import polars as pl
+import pytest
 
+import fastnda
 from fastnda.nda import _merge_aux, _read_nda_130_91
+
+
+def test_lazy_imports() -> None:
+    """Lazy imports resolve known names and rejects unknown ones."""
+    assert fastnda.step_type_map is fastnda.dicts.step_type_map
+    assert fastnda.btsda_csv_to_parquet is fastnda.btsda.btsda_csv_to_parquet
+    with pytest.raises(AttributeError, match="no attribute 'foo'"):
+        fastnda.foo  # noqa: B018
 
 
 def test_nda_aux_merge() -> None:

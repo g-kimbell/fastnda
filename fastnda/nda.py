@@ -135,8 +135,9 @@ def _get_arr_from_nda(
     """Read an nda file."""
     header_idx = _find_header(mm, header)
     num_records = (len(mm) - header_idx) // record_len
-    end = header_idx + num_records * record_len
-    return np.frombuffer(mm[header_idx:end], dtype=np.uint8).reshape((num_records, record_len))
+    return np.frombuffer(mm, dtype=np.uint8, count=num_records * record_len, offset=header_idx).reshape(
+        (num_records, record_len)
+    )
 
 
 def _view_arr(
