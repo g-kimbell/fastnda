@@ -41,6 +41,120 @@ def read_nda(file: str | Path) -> pl.DataFrame:
     return df.sort(by="index")
 
 
+# Active mass in ug is stored at a fixed offset in the 2048-byte NDA header
+# It is separate to the test info records, which have relative positions
+# Tuple is (minimum version, byte osset)
+_ACTIVE_MASS_OFFSETS: list[tuple[int, int]] = [
+    (9, 152),
+    (8, 144),
+    (1, 80),
+]
+
+
+def _nda_active_mass_mg(mm: mmap.mmap, nda_version: int) -> float:
+    """Read active material mass (mg) from the NDA header, for an nda_version 1-29 file."""
+    offset = next(off for min_ver, off in _ACTIVE_MASS_OFFSETS if nda_version >= min_ver)
+    return int.from_bytes(mm[offset : offset + 4], "little") / 1000
+
+
+# Field name: (byte offset, byte length), relative to the start of the test info record
+_TEST_INFO_FIELDS_V1: dict[str, tuple[int, int]] = {
+    "start_time": (36, 20),
+    "creator": (76, 15),
+    "sn": (91, 20),
+    "remarks": (111, 100),
+}
+_TEST_INFO_FIELDS_V11 = {
+    **_TEST_INFO_FIELDS_V1,
+    "start_time": (37, 20),
+    "creator": (77, 60),
+    "sn": (137, 90),
+    "remarks": (227, 100),
+}
+_TEST_INFO_FIELDS_V17 = {**_TEST_INFO_FIELDS_V11, "barcode": (343, 40)}
+_TEST_INFO_FIELDS_V29 = {**_TEST_INFO_FIELDS_V17, "test_name": (383, 60), "step_name": (443, 60)}
+
+# (minimum version, test info record size in bytes, field layout for that record)
+_TEST_INFO_LAYOUTS: list[tuple[int, int, dict[str, tuple[int, int]]]] = [
+    (29, 503, _TEST_INFO_FIELDS_V29),
+    (17, 383, _TEST_INFO_FIELDS_V17),
+    (16, 343, _TEST_INFO_FIELDS_V11),  # v16 adds a 'parallel channel' field, offsets unaffected
+    (11, 327, _TEST_INFO_FIELDS_V11),
+    (1, 211, _TEST_INFO_FIELDS_V1),
+]
+
+
+def _read_nda_test_info(mm: mmap.mmap, nda_version: int) -> dict[str, str]:
+    """Read the test info record from an nda_version 1-29 file.
+
+    The header stores the test info begin byte and length at fixed offsets 24/28.
+    The test info record struct changes with file version.
+    Uses last test info record found.
+    """
+    struct_size, fields = next((size, f) for min_ver, size, f in _TEST_INFO_LAYOUTS if nda_version >= min_ver)
+
+    test_begin = int.from_bytes(mm[24:28], "little")
+    test_len = int.from_bytes(mm[28:32], "little")
+    count = test_len // struct_size if test_begin and test_len else 0
+    if count == 0:
+        return {}
+    record_offset = test_begin + (count - 1) * struct_size
+    record = mm[record_offset : record_offset + struct_size]
+
+    # Fixed-size null-terminated C strings, only return up to the first null, after that is garbled
+    return {
+        name: record[offset : offset + length].split(b"\x00", 1)[0].decode("gbk", errors="ignore").strip()
+        for name, (offset, length) in fields.items()
+    }
+
+
+def _read_nda_version_info(mm: mmap.mmap) -> dict[str, str]:
+    """Read BTS server/client version strings, if present near the start of the file."""
+    metadata: dict[str, str] = {}
+    version_loc = mm.find(b"BTSServer")
+    if version_loc != -1:
+        mm.seek(version_loc)
+        metadata["server_version"] = mm.read(50).strip(b"\x00").decode()
+        mm.seek(50, 1)
+        metadata["client_version"] = mm.read(50).strip(b"\x00").decode()
+    else:
+        xwj = mm.find(b"BTS_XWJ", 0, 1024)
+        if xwj != -1:
+            end = mm.find(b"\x00", xwj, 1024)
+            if end != -1:
+                metadata["server_version"] = mm[xwj:end].decode().strip()
+        else:
+            logger.info("BTS version not found!")
+    return metadata
+
+
+def _read_nda_130_metadata(mm: mmap.mmap) -> dict[str, str | float]:
+    """Read metadata specific to nda_version 130 (BTS9.0/9.1)."""
+    metadata: dict[str, str | float] = {}
+    subver = int(mm[1024])
+    if subver == 85:
+        metadata["bts_version"] = "9.1"
+        ver = mm.find(b"9.1.")
+    elif subver == 18:
+        metadata["bts_version"] = "9.0"
+        ver = mm.find(b"9.0.")
+    else:
+        ver = -1
+    if ver != -1:
+        end = mm.find(b"\x00", ver)
+        if end != 1:
+            metadata["bts_version"] = mm[ver:end].decode()
+
+    # Identify footer
+    footer = mm.rfind(b"\x06\x00\xf0\x1d\x81\x00\x03\x00\x61\x90\x71\x90\x02\x7f\xff\x00", 1024)
+    if footer != -1:
+        mm.seek(footer + 16)
+        buf = mm.read(499)
+        metadata["active_mass_mg"] = struct.unpack("<d", buf[-8:])[0]
+        metadata["remarks"] = buf[363:491].decode("ASCII").replace(chr(0), "").strip()
+    return metadata
+
+
 def read_nda_metadata(file: str | Path) -> dict[str, str | int | float]:
     """Read metadata from a Neware .nda file.
 
@@ -62,57 +176,19 @@ def read_nda_metadata(file: str | Path) -> dict[str, str | int | float]:
     metadata: dict[str, int | str | float] = {}
 
     # Get the file version
-    metadata["nda_version"] = int(mm[14])
+    nda_version = int(mm[14])
+    metadata["nda_version"] = nda_version
+    metadata.update(_read_nda_version_info(mm))
 
-    # Try to find server and client version info
-    version_loc = mm.find(b"BTSServer")
-    if version_loc != -1:
-        mm.seek(version_loc)
-        server = mm.read(50).strip(b"\x00").decode()
-        metadata["server_version"] = server
-
-        mm.seek(50, 1)
-        client = mm.read(50).strip(b"\x00").decode()
-        metadata["client_version"] = client
-    else:
-        xwj = mm.find(b"BTS_XWJ", 0, 1024)
-        if xwj != -1:
-            end = mm.find(b"\x00", xwj, 1024)
-            if end != -1:
-                metadata["server_version"] = mm[xwj:end].decode().strip()
-        else:
-            logger.info("BTS version not found!")
-
-    # NDA 29 specific fields
-    if metadata["nda_version"] == 29:
-        metadata["active_mass_mg"] = int.from_bytes(mm[152:156], "little") / 1000
-        metadata["remarks"] = mm[2317:2417].decode("ASCII", errors="ignore").replace(chr(0), "").strip()
+    # NDA 1-29 fields: header stores {nBegin, nLen} pointers to a device-info block and a test-info
+    # block (remark/creator/SN/barcode/...) rather than fixed absolute offsets - see _read_nda_test_info.
+    if 1 <= nda_version <= 29:
+        metadata["active_mass_mg"] = _nda_active_mass_mg(mm, nda_version)
+        metadata.update(_read_nda_test_info(mm, nda_version))
 
     # NDA 130 specific fields
-    elif metadata["nda_version"] == 130:
-        subver = int(mm[1024])
-        if subver == 85:
-            metadata["bts_version"] = "9.1"
-            ver = mm.find(b"9.1.")
-            if ver != -1:
-                end = mm.find(b"\x00", ver)
-                if end != 1:
-                    metadata["bts_version"] = mm[ver:end].decode()
-        elif subver == 18:
-            metadata["bts_version"] = "9.0"
-            ver = mm.find(b"9.0.")
-            if ver != -1:
-                end = mm.find(b"\x00", ver)
-                if end != 1:
-                    metadata["bts_version"] = mm[ver:end].decode()
-
-        # Identify footer
-        footer = mm.rfind(b"\x06\x00\xf0\x1d\x81\x00\x03\x00\x61\x90\x71\x90\x02\x7f\xff\x00", 1024)
-        if footer != -1:
-            mm.seek(footer + 16)
-            buf = mm.read(499)
-            metadata["active_mass_mg"] = struct.unpack("<d", buf[-8:])[0]
-            metadata["remarks"] = buf[363:491].decode("ASCII").replace(chr(0), "").strip()
+    elif nda_version == 130:
+        metadata.update(_read_nda_130_metadata(mm))
 
     return metadata
 
