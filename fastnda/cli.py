@@ -72,6 +72,25 @@ RawCategoriesOption = Annotated[
 ]
 
 
+def _version_callback(*, value: bool) -> None:
+    if value:
+        from fastnda.version import __version__  # noqa: PLC0415
+
+        typer.echo(f"fastnda {__version__}")
+        raise typer.Exit
+
+
+VersionOption = Annotated[
+    bool,
+    typer.Option(
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the fastnda version and exit.",
+    ),
+]
+
+
 def _require_pandas() -> None:
     """Check if pandas is installed."""
     try:
@@ -99,6 +118,7 @@ def main(
     ctx: typer.Context,
     verbose: VerbosityOption = 0,
     quiet: QuietOption = 0,
+    version: VersionOption = False,  # noqa: ARG001
 ) -> None:
     """CLI for converting Neware .nda/.ndax files."""
     verbosity = verbose - quiet

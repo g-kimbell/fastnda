@@ -478,3 +478,9 @@ class TestCliWithOptionalDeps:
         assert output_2.exists()
         df = pl.read_parquet(output_1)
         assert "current_ampere" in df.columns
+
+    def test_version(self) -> None:
+        """--version prints the version."""
+        result = self.runner.invoke(app, ["--version"])
+        assert result.exit_code == 0, result
+        assert result.stdout.strip() == "fastnda " + str(fastnda.__version__)
