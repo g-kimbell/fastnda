@@ -1,9 +1,9 @@
 # Copyright © 2026, Empa.
 """Module to read Neware NDA files."""
 
+import datetime
 import logging
 import mmap
-import struct
 import warnings
 from collections.abc import Callable
 from pathlib import Path
@@ -45,6 +45,7 @@ def read_nda(file: str | Path) -> pl.DataFrame:
 # It is separate to the test info records, which have relative positions
 # Tuple is (minimum version, byte osset)
 _ACTIVE_MASS_OFFSETS: list[tuple[int, int]] = [
+    (130, 330),
     (9, 152),
     (8, 144),
     (1, 80),
@@ -128,6 +129,119 @@ def _read_nda_version_info(mm: mmap.mmap) -> dict[str, str]:
     return metadata
 
 
+# Pack test info  key: (byte offset, byte length)
+# Relative to the start of one record.
+_PACK_TEST_INFO_FIELDS: dict[str, tuple[int, int]] = {
+    "creator": (8, 32),
+    "sn": (40, 32),
+    "remarks": (72, 32),
+    "step_file_name": (104, 64),
+    "step_name": (168, 64),
+    "battery_type": (232, 32),
+    "note": (264, 64),
+}
+
+# Older records (swjVer < 8) seems to have an extra 4-byte field before creator, shifting
+# all other fields. The extra field is a small number (1, 2) in test files, meaning unknown.
+_PACK_TEST_INFO_FIELDS_OLD: dict[str, tuple[int, int]] = {
+    name: (offset + 4, length) for name, (offset, length) in _PACK_TEST_INFO_FIELDS.items()
+}
+
+# Pack test info little-endian u64 microseconds Unix time.
+_PACK_TEST_INFO_TIMESTAMP_FIELDS: dict[str, int] = {
+    "start_time": 432,
+    "stop_time": 440,
+}
+# Older (swjVer < 8) records have these timestamps at different offset
+_PACK_TEST_INFO_TIMESTAMP_FIELDS_OLD: dict[str, int] = {
+    "start_time": 400,
+    "stop_time": 408,
+}
+
+
+def _decode_pstring(data: bytes, pos: int) -> tuple[str, int]:
+    """Decode one Pascal-style string (1-byte length prefix, no terminator); return (text, next_pos)."""
+    length = data[pos]
+    raw = data[pos + 1 : pos + 1 + length]
+    return raw.decode("gbk", errors="ignore"), pos + 1 + length
+
+
+def _read_pack_test_info_old_extension(record: bytes) -> dict[str, str]:
+    """Read records from 'pack test info' block in swjVer < 8."""
+    try:
+        pos = 420
+        _bts_version, pos = _decode_pstring(record, pos)  # redundant with the file-wide bts_version search
+        _guid, pos = _decode_pstring(record, pos)
+        _guid_repeat, pos = _decode_pstring(record, pos)
+        equipment_ip, pos = _decode_pstring(record, pos)
+        _unknown, pos = _decode_pstring(record, pos)  # unknown, "[org] - dedicated use" in examples
+        _unknown, pos = _decode_pstring(record, pos)  # unknown
+        _empty, pos = _decode_pstring(record, pos)  # zero-length in real samples
+        _label_repeat, pos = _decode_pstring(record, pos)
+        pos += 4  # 4 fixed unknown bytes
+        server_ip, _pos = _decode_pstring(record, pos)
+    except IndexError:
+        return {}
+    return {"equipment_ip": equipment_ip, "server_ip": server_ip}
+
+
+# piLogEx, doesn't seem to be present in the older BTS9.0.3 file
+_PILOGEX_FIELDS: dict[str, tuple[int, int]] = {
+    "server_ip": (223, 32),
+    "hostname": (255, 32),
+}
+
+
+def _read_nda_130_log_ex(mm: mmap.mmap) -> dict[str, str]:
+    """Read the 'log ex' block from an nda_version 130 file.
+
+    The head info 9022 header stores a u64 {begin, length} pointer to this block
+    at fixed offsets 242/250.
+    """
+    log_ex_begin = int.from_bytes(mm[242:250], "little")
+    log_ex_len = int.from_bytes(mm[250:258], "little")
+    if not log_ex_begin or not log_ex_len or log_ex_begin + log_ex_len > len(mm):
+        return {}
+    record = mm[log_ex_begin : log_ex_begin + log_ex_len]
+    return {
+        name: record[offset : offset + length].split(b"\x00", 1)[0].decode("gbk", errors="ignore").strip()
+        for name, (offset, length) in _PILOGEX_FIELDS.items()
+        if offset + length <= len(record)
+    }
+
+
+def _read_nda_130_test_info(mm: mmap.mmap) -> dict[str, str]:
+    """Read records from 'pack test info' from an nda_version 130 file.
+
+    The header stores a u64 {begin, length} pointer to this block at fixed offsets 34/42.
+    """
+    test_begin = int.from_bytes(mm[34:42], "little")
+    test_len = int.from_bytes(mm[42:50], "little")
+    if not test_begin or not test_len:
+        return {}
+    record = mm[test_begin : test_begin + test_len]
+    swj_ver = int.from_bytes(record[0:2], "little")
+    is_old = swj_ver < 8
+    fields = _PACK_TEST_INFO_FIELDS_OLD if is_old else _PACK_TEST_INFO_FIELDS
+    metadata: dict[str, str] = {
+        name: record[offset : offset + length].split(b"\x00", 1)[0].decode("gbk", errors="ignore").strip()
+        for name, (offset, length) in fields.items()
+    }
+    timestamp_fields = _PACK_TEST_INFO_TIMESTAMP_FIELDS_OLD if is_old else _PACK_TEST_INFO_TIMESTAMP_FIELDS
+    for name, offset in timestamp_fields.items():
+        micros = int.from_bytes(record[offset : offset + 8], "little")
+        if micros:
+            try:
+                dt = datetime.datetime.fromtimestamp(micros / 1e6, tz=datetime.UTC)
+            except (OSError, OverflowError, ValueError):
+                # Not confirmed on older files, just skip
+                continue
+            metadata[name] = dt.isoformat(timespec="milliseconds")
+    if is_old:
+        metadata.update(_read_pack_test_info_old_extension(record))
+    return metadata
+
+
 def _read_nda_130_metadata(mm: mmap.mmap) -> dict[str, str | float]:
     """Read metadata specific to nda_version 130 (BTS9.0/9.1)."""
     metadata: dict[str, str | float] = {}
@@ -145,13 +259,9 @@ def _read_nda_130_metadata(mm: mmap.mmap) -> dict[str, str | float]:
         if end != 1:
             metadata["bts_version"] = mm[ver:end].decode()
 
-    # Identify footer
-    footer = mm.rfind(b"\x06\x00\xf0\x1d\x81\x00\x03\x00\x61\x90\x71\x90\x02\x7f\xff\x00", 1024)
-    if footer != -1:
-        mm.seek(footer + 16)
-        buf = mm.read(499)
-        metadata["active_mass_mg"] = struct.unpack("<d", buf[-8:])[0]
-        metadata["remarks"] = buf[363:491].decode("ASCII").replace(chr(0), "").strip()
+    metadata["active_mass_mg"] = _nda_active_mass_mg(mm, 130)
+    metadata.update(_read_nda_130_test_info(mm))
+    metadata.update(_read_nda_130_log_ex(mm))
     return metadata
 
 

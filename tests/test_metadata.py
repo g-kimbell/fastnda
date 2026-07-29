@@ -90,3 +90,50 @@ class TestMetaData:
         assert metadata["creator"] == "LIN"
         assert metadata["sn"] == "2016-09-18 10-38-50"
         assert metadata["remarks"] == "2-1"
+
+    def test_nda130_bts903(self) -> None:
+        """Test reading metadata from an old BTS9.0.3 nda_version 130 file."""
+        current_folder = Path(__file__).parent
+        test_file = current_folder / "test_data" / "2-1-6_61_07005012.nda.zip"
+        metadata = _read_metadata(test_file)
+        assert metadata["nda_version"] == 130
+        assert metadata["bts_version"] == "9.0.3.16616.20160408.R5"
+        assert metadata["active_mass_mg"] == 0.0
+        assert metadata["creator"] == "admin"
+        assert metadata["sn"] == ""
+        assert metadata["remarks"] == ""
+        assert metadata["note"] == ""
+        assert metadata["start_time"] == "2016-04-19T12:21:01.022+00:00"
+        assert metadata["stop_time"] == "2016-04-19T13:21:03.143+00:00"
+        assert metadata["equipment_ip"] == "192.168.3.98"
+        assert metadata["server_ip"] == "192.168.3.110"
+
+    def test_nda130_sintef(self) -> None:
+        """Test reading metadata from a BTS9.1.5 nda_version 130 file."""
+        current_folder = Path(__file__).parent
+        test_file = current_folder / "test_data" / "SINTEF__G20M7_BTS91.nda.zip"
+        metadata = _read_metadata(test_file)
+        assert metadata["nda_version"] == 130
+        assert metadata["bts_version"] == "9.1.5.7.20250527.R5"
+        assert metadata["creator"] == "admin"
+        assert metadata["sn"] == "2025-12"
+        assert metadata["note"] == "C30 Charge"
+        assert metadata["start_time"] == "2025-12-22T08:44:24.914+00:00"
+        assert metadata["stop_time"] == "2025-12-24T09:33:13.562+00:00"
+        assert metadata["server_ip"] == "192.168.1.250"
+        assert metadata["hostname"] == "SINTEFPC10925"
+
+    def test_nda130_testfile(self) -> None:
+        """Test reading metadata from another BTS9.1.5 nda_version 130 file."""
+        current_folder = Path(__file__).parent
+        test_file = current_folder / "test_data" / "TestFile.nda.zip"
+        metadata = _read_metadata(test_file)
+        assert metadata["nda_version"] == 130
+        assert metadata["bts_version"] == "9.1.5.7.20240403.R5"
+        assert metadata["creator"] == "admin"
+        assert metadata["sn"] == "P_DCH-CH"
+        assert metadata["note"] == "cell16"
+        assert metadata["start_time"] == "2024-05-27T08:02:48.782+00:00"
+        assert metadata["stop_time"] == "2024-05-28T08:56:24.076+00:00"
+        assert metadata["server_ip"] == "192.168.1.250"
+        assert metadata["hostname"] == "LENOVO-L0X1245"
