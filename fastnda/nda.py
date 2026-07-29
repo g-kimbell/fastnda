@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Module to read Neware NDA files."""
 
 import logging

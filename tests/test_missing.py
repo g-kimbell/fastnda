@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Ensure functions behave for missing/unknown files."""
 
 import mmap

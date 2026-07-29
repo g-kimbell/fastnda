@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Private NDC readers used by NDAX module.
 
 Do not use the private methods read_ndc_{type}_{number} directly.

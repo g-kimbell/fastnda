@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """CLI to use fastnda conversion."""
 
 import json
@@ -74,7 +75,7 @@ RawCategoriesOption = Annotated[
 
 def _version_callback(*, value: bool) -> None:
     if value:
-        from fastnda.version import __version__  # noqa: PLC0415
+        from fastnda.version import __version__
 
         typer.echo(f"fastnda {__version__}")
         raise typer.Exit
@@ -94,8 +95,8 @@ VersionOption = Annotated[
 def _require_pandas() -> None:
     """Check if pandas is installed."""
     try:
-        import pandas as pd  # noqa: F401, PLC0415
-        import pyarrow as pa  # noqa: F401, PLC0415
+        import pandas as pd  # noqa: F401
+        import pyarrow as pa  # noqa: F401
     except ImportError as e:
         msg = (
             "'pandas' and 'pyarrow' optional dependencies are not installed.\n"
@@ -107,7 +108,7 @@ def _require_pandas() -> None:
 def _require_tables() -> None:
     """Check if pytables is installed for hdf5."""
     try:
-        import tables  # noqa: F401, PLC0415
+        import tables  # noqa: F401
     except ImportError as e:
         msg = "'tables' optional dependency is not installed.\nInstall extras with `pip install fastnda[extras]`"
         raise RuntimeError(msg) from e
@@ -118,7 +119,7 @@ def main(
     ctx: typer.Context,
     verbose: VerbosityOption = 0,
     quiet: QuietOption = 0,
-    version: VersionOption = False,  # noqa: ARG001
+    version: VersionOption = False,  # noqa: ARG001, FBT002
 ) -> None:
     """CLI for converting Neware .nda/.ndax files."""
     verbosity = verbose - quiet
@@ -182,11 +183,13 @@ def convert(
         _require_pandas()
     if out_file is None:
         out_file = in_file.with_suffix("." + file_format)
-    _convert_with_type(in_file, out_file, file_format, cycle_mode, columns, pandas, raw_categories)
+    _convert_with_type(
+        in_file, out_file, file_format, cycle_mode, columns, pandas=pandas, raw_categories=raw_categories
+    )
 
 
 @app.command()
-def batch_convert(
+def batch_convert(  # noqa: D417
     ctx: typer.Context,
     in_folder: InFolderArgument,
     out_folder: OutFolderArgument = None,
@@ -224,7 +227,7 @@ def batch_convert(
         raw_categories: Return `step_type` column as integer codes.
 
     """
-    from tqdm import tqdm  # noqa: PLC0415
+    from tqdm import tqdm
 
     class TqdmHandler(logging.Handler):
         """Class to handle logs while using tqdm progress bar."""
@@ -269,7 +272,9 @@ def batch_convert(
         out_file = out_folder / in_file.relative_to(in_folder).with_suffix("." + file_format)
         out_file.parent.mkdir(exist_ok=True)
         try:
-            _convert_with_type(in_file, out_file, file_format, cycle_mode, columns, pandas, raw_categories)
+            _convert_with_type(
+                in_file, out_file, file_format, cycle_mode, columns, pandas=pandas, raw_categories=raw_categories
+            )
         except (ValueError, BadZipFile, KeyError, AttributeError):
             LOGGER.exception("Failed to convert %s.", in_file)
 
@@ -291,6 +296,7 @@ def _convert_with_type(
     file_format: FormatOption,
     cycle_mode: CycleModeOption,
     columns: ColumnsOption,
+    *,
     pandas: bool,
     raw_categories: bool,
 ) -> None:

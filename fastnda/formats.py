@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Convert outputs to different formats."""
 
 from collections.abc import Mapping

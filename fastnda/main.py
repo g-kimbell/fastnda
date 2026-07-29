@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Main module for reading Neware NDA and NDAX files."""
 
 from __future__ import annotations
@@ -68,6 +69,7 @@ def read(
 
         df = _generate_cycle_number(df, cycle_mode)
     import polars as pl
+
     from fastnda.dicts import DTYPE_MAP, STEP_TYPE_MAP
 
     if "total_time_s" not in df.columns:

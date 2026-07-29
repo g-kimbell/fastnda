@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Tests ndax reading without isal dependency."""
 
 import sys
@@ -22,8 +23,8 @@ def fastnda_no_isal(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     monkeypatch.setitem(sys.modules, "isal.isal_zlib", None)
 
     # Fresh import fastnda
-    import fastnda  # noqa: PLC0415
-    import fastnda.ndax  # noqa: PLC0415
+    import fastnda
+    import fastnda.ndax
 
     return fastnda
 

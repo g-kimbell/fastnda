@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Unit tests for functions outside of utils."""
 
 import mmap

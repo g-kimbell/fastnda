@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Tests for fastnda CLI without optional dependencies."""
 
 import builtins
@@ -102,10 +103,10 @@ class TestCliNoExtras:
         assert result.exit_code == 0
         assert output.exists()
 
-        import polars as pl  # noqa: PLC0415
-        from polars.testing import assert_frame_equal  # noqa: PLC0415
+        import polars as pl
+        from polars.testing import assert_frame_equal
 
-        import fastnda  # noqa: PLC0415
+        import fastnda
 
         df1 = fastnda.read(self.test_file)
         df2 = pl.read_parquet(output)
@@ -127,10 +128,10 @@ class TestCliNoExtras:
         assert result.exit_code == 0
         assert output.exists()
 
-        import polars as pl  # noqa: PLC0415
-        from polars.testing import assert_frame_equal  # noqa: PLC0415
+        import polars as pl
+        from polars.testing import assert_frame_equal
 
-        import fastnda  # noqa: PLC0415
+        import fastnda
 
         df1 = fastnda.read(self.test_file)
         df2 = pl.read_ipc(output)

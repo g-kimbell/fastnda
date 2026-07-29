@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Functions for generating test data from BTSDA.
 
 Export data using BTSDA.

@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Test btsda module."""
 
 from pathlib import Path

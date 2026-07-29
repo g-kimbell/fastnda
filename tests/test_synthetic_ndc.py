@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Unit tests for ndax `_read_ndc_{type}_x` parsers.
 
 Uses minimal synthetic byte buffers matching each struct's known layout and
@@ -110,7 +111,7 @@ def _assert_col(df: pl.DataFrame, col: str, expected: list, *, abs_tol: float = 
             assert a == e, f"{col}: {actual} != {expected}"
 
 
-def _make_ndc_file(  # noqa: PLR0913
+def _make_ndc_file(
     dtype: np.dtype,
     row_bytes: list[bytes],
     *,
