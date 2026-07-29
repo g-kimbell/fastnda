@@ -3,7 +3,12 @@ repos:
     rev: v0.16.0
     hooks:
       - id: ruff-check
-        args: ["--fix", "--select=F,E9,B"]
+        args:
+          [
+            "--fix",
+            "--config",
+            "lint.extend-ignore=['C901','PLR09']",  # complexity rules not enforced, informational only
+          ]
       - id: ruff-format
 
   - repo: https://github.com/astral-sh/uv-pre-commit
