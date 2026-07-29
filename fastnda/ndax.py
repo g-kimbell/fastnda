@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Module to read Neware NDAX files."""
 
 import logging
@@ -74,7 +75,7 @@ def read_ndax(file: str | Path) -> pl.DataFrame:
                     aux_df = aux_df.with_columns(pl.col("?") * scale)
                 aux_df = aux_df.rename({"?": f"aux{aux_id}_{col}"})
             else:  # Otherwise just append aux ID to column names
-                aux_df = aux_df.rename({col: f"aux{aux_id}_{col}" for col in aux_df.columns if col not in ["index"]})
+                aux_df = aux_df.rename({col: f"aux{aux_id}_{col}" for col in aux_df.columns if col != "index"})
             if len(df) == len(aux_df):
                 df = pl.concat([df, aux_df.drop("index")], how="horizontal")
             else:

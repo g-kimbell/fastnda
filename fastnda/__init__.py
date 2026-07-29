@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Public API."""
 
 from typing import TYPE_CHECKING, Any
@@ -21,11 +22,11 @@ __all__ = [
 def __getattr__(name: str) -> Any:  # noqa: ANN401
     """Lazy imports so `import fastnda` doesn't pull in polars/numpy."""
     if name == "btsda_csv_to_parquet":
-        from fastnda.btsda import btsda_csv_to_parquet  # noqa: PLC0415
+        from fastnda.btsda import btsda_csv_to_parquet
 
         return btsda_csv_to_parquet
     if name == "step_type_map":
-        from fastnda.dicts import step_type_map  # noqa: PLC0415
+        from fastnda.dicts import step_type_map
 
         return step_type_map
     msg = f"module {__name__!r} has no attribute {name!r}"

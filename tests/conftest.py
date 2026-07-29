@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Default to tests/test_data, allow users to change test data folder."""
 
 import re

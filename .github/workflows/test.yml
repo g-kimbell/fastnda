@@ -38,7 +38,7 @@ jobs:
           uv pip install -e .[extras]
       - name: Lint with ruff
         run: |
-          ruff check --select=F,E9,B
+          ruff check --config "lint.extend-ignore=['C901','PLR09']"
   
       - name: Test with pytest
         run: |

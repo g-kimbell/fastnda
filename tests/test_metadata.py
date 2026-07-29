@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Tests for read metadata functions."""
 
 from pathlib import Path

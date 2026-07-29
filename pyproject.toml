@@ -33,7 +33,7 @@ dev = [
     "pandas>=2.3.1",
     "pyarrow>=23.0.0",
     "pytest>=8.4.1",
-    "ruff>=0.12.8",
+    "ruff>=0.16.0",
     "tables>=3.11.0; python_version >= '3.11'",
     "tables>=3.10.0,<3.11.0; python_version < '3.11'",
 ]
@@ -51,17 +51,10 @@ fastnda = "fastnda.cli:app"
 line-length = 120
 lint.select = ["ALL"]
 lint.ignore = [
-    "N806",
-    "FA102",
-    "PD901",
-    "FBT001",
-    "FBT002",
-    "PLR2004",
-    "TD002",
-    "TD003",
-    "D203",
-    "D213",
-    "COM812",
+    "N806",  # upper case allowed in variables, used for units
+    "PLR2004",  # magic value comparisons, used everywhere for version numbers
+    "COM812",  # conflicts with ruff format
+    "PLC0415",  # top-level imports - we use lazy imports frequently
 ]
 fix = true
 

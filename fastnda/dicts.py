@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Mappings used in data processing."""
 
 from collections.abc import Mapping

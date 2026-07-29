@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Tests for fastnda CLI with optional dependencies."""
 
 import json

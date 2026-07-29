@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Unit tests for fastnda.nda's low-level `_read_nda_x` struct decoders.
 
 Uses minimal synthetic byte buffers matching each struct's known layout and

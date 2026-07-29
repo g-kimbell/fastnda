@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Utility functions for processing Neware data."""
 
 import logging

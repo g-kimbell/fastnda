@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Test utils module."""
 
 import polars as pl

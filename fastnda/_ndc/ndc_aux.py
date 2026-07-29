@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Private module to read Neware 'aux' NDC files.
 
 Do not use these methods directly, they may change any time without warning.

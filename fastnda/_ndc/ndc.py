@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Private module to read all Neware NDC files."""
 
 import logging
@@ -37,7 +38,7 @@ _CONFIRMED_NDC_KEYS = frozenset(
     },
 )
 # Map NDC (version, filetype) to handler functions
-_NDC_READERS: dict[tuple[int, int], None | Callable[[bytes], pl.DataFrame]] = {
+_NDC_READERS: dict[tuple[int, int], Callable[[bytes], pl.DataFrame] | None] = {
     # ndax 1
     (1, 1): ndc_main.read_ndc_main_1,
     # ndax 2

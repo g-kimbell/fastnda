@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Test read functionality."""
 
 import importlib
@@ -142,7 +143,7 @@ class TestRead:
 
     def test_index(self, parsed_data: tuple) -> None:
         """Index should be UInt32 monotonically increasing by 1."""
-        df, df_ref = parsed_data
+        df, _df_ref = parsed_data
         assert_series_equal(
             df["index"],
             pl.Series("ref_index", range(1, len(df) + 1), dtype=pl.UInt32),

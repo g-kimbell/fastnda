@@ -1,3 +1,4 @@
+# Copyright © 2026, Empa.
 """Private functions shared by all ndc readers.
 
 Do not use these methods directly, they may change any time without warning.
