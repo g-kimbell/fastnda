@@ -3,7 +3,6 @@
 
 import importlib
 import re
-import warnings
 from collections.abc import Callable, Generator
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -125,7 +124,7 @@ class TestRead:
             check_names=False,
         )
 
-    def test_cycle(self, parsed_data: tuple) -> None:
+    def test_cycle(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Cycle should be exact when using raw cycle_mode."""
         df, df_ref = parsed_data
         # If the default is wrong, check if cycle_mode auto is correct
@@ -139,7 +138,7 @@ class TestRead:
                 df_ref["Cycle Index"],
                 check_names=False,
             )
-            warnings.warn("Cycles do not match with 'raw' cycle_mode, only with 'auto'", stacklevel=2)
+            note("Cycles do not match with 'raw' cycle_mode, only with 'auto'")
 
     def test_index(self, parsed_data: tuple) -> None:
         """Index should be UInt32 monotonically increasing by 1."""
@@ -150,7 +149,7 @@ class TestRead:
             check_names=False,
         )
 
-    def test_step_time(self, parsed_data: tuple) -> None:
+    def test_step_time(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Step time should agree within 1 us."""
         df, df_ref = parsed_data
         if len(df) == 0 and len(df_ref) == 0:
@@ -169,11 +168,11 @@ class TestRead:
             if max_diff is not None and max_diff > threshold:
                 msg = f"Step time columns differ by up to {max_diff:.2e}"
                 raise ValueError(msg)
-        # Check earliest time diff, warn if over 1 us
+        # Check earliest time diff, note if over 1 us
         if max_diff is not None and max_diff > 5e-7:
-            warnings.warn(f"Step time only matches within {max_diff:.2e} s", stacklevel=2)
+            note(f"Step time only matches within {max_diff:.2e} s")
 
-    def test_total_time(self, parsed_data: tuple) -> None:
+    def test_total_time(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Total time should agree within 1 us."""
         df, df_ref = parsed_data
         if len(df) == 0 and len(df_ref) == 0:
@@ -192,9 +191,9 @@ class TestRead:
             if max_diff is not None and max_diff > threshold:
                 msg = f"Total time columns differ by up to {max_diff:.2e}"
                 raise ValueError(msg)
-        # Check earliest time diff, warn if over 1 us
+        # Check earliest time diff, note if over 1 us
         if max_diff is not None and max_diff > 5e-7:
-            warnings.warn(f"Total time only matches within {max_diff:.2e} s", stacklevel=2)
+            note(f"Total time only matches within {max_diff:.2e} s")
 
     def test_datetime(self, parsed_data: tuple) -> None:
         """Date should agree within 1 us."""
@@ -253,7 +252,7 @@ class TestRead:
                 msg = "Capacity columns are different."
                 raise ValueError(msg)
 
-    def test_energy(self, parsed_data: tuple) -> None:
+    def test_energy(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Neware energy can be recorded 0.1 mWs, check to 3e-5 mWh."""
         df, df_ref = parsed_data
         # Neware capacity can be absolute for both charge and discharge
@@ -272,7 +271,7 @@ class TestRead:
                 raise ValueError(msg)
             if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
                 msg = f"Energy columns differ by up to {max(abs_diff):.2e} mWh (or {max(rel_diff) * 100:2g}%)."
-                warnings.warn(msg, stacklevel=2)
+                note(msg)
 
     def test_capacity_energy_sign(self, parsed_data: tuple) -> None:
         """Capacity/energy should have same sign as current."""
@@ -456,11 +455,11 @@ def nda_reader_call_tracker() -> Generator[set[str], None, None]:
 _DISTINCT_NDA_READER_NAMES = sorted({r.__name__ for r in _NDA_READERS.values() if r is not None})
 
 
-class TestNdaVersionCoverage:
+class TestNdaCov:
     """Track which NDA reader functions are tested with real data."""
 
     @pytest.mark.parametrize("reader_name", _DISTINCT_NDA_READER_NAMES)
-    def test_reader_called_with_real_data(self, reader_name: str, nda_reader_call_tracker: set[str]) -> None:
+    def test_reader_validated(self, reader_name: str, nda_reader_call_tracker: set[str]) -> None:
         """Confirm this reader function was actually invoked by TestRead's real-data reads."""
         if reader_name not in nda_reader_call_tracker:
             pytest.xfail(f"{reader_name} was never tested with a real data file.")
@@ -518,11 +517,11 @@ def ndc_reader_call_tracker() -> Generator[set[tuple[tuple[int, int], str]], Non
 _DISTINCT_NDC_READER_NAMES = sorted({r.__name__ for r in _NDC_READERS.values() if r is not None})
 
 
-class TestNdcVersionCoverage:
+class TestNdcCov:
     """Track which NDC reader functions are tested with real data."""
 
     @pytest.mark.parametrize("reader_name", _DISTINCT_NDC_READER_NAMES)
-    def test_reader_called_with_real_data(
+    def test_reader_validated(
         self, reader_name: str, ndc_reader_call_tracker: set[tuple[tuple[int, int], str]]
     ) -> None:
         """Confirm this reader function was actually invoked by TestRead's real-data reads."""
