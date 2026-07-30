@@ -122,4 +122,8 @@ def pytest_terminal_summary(terminalreporter: "TerminalReporter") -> None:
         for name, message in report.user_properties:
             if name == "note":
                 terminalreporter.write("NOTE", yellow=True)
-                terminalreporter.write_line(f" {report.nodeid} - {message}")
+                path, sep, parts = report.nodeid.partition("::")
+                terminalreporter.write(f" {path}{sep}")
+                if parts:
+                    terminalreporter.write(parts, bold=True)
+                terminalreporter.write_line(f" - {message}")
