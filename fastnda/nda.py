@@ -104,7 +104,7 @@ def _read_nda_test_info(mm: mmap.mmap, nda_version: int) -> dict[str, str]:
 
     # Fixed-size null-terminated C strings, only return up to the first null, after that is garbled
     return {
-        name: record[offset : offset + length].split(b"\x00", 1)[0].decode("gbk", errors="ignore").strip()
+        name: record[offset : offset + length].split(b"\x00", 1)[0].decode("gb2312", errors="ignore").strip()
         for name, (offset, length) in fields.items()
     }
 
@@ -129,33 +129,84 @@ def _read_nda_version_info(mm: mmap.mmap) -> dict[str, str]:
     return metadata
 
 
-# Pack test info  key: (byte offset, byte length)
-# Relative to the start of one record.
-_PACK_TEST_INFO_FIELDS: dict[str, tuple[int, int]] = {
-    "creator": (8, 32),
-    "sn": (40, 32),
-    "remarks": (72, 32),
-    "step_file_name": (104, 64),
-    "step_name": (168, 64),
-    "battery_type": (232, 32),
-    "note": (264, 64),
+def _decode_text(raw: bytes) -> str:
+    """Decode a fixed-width, null-terminated field."""
+    return raw.split(b"\x00", 1)[0].decode("gb2312", errors="ignore").strip()
+
+
+def _decode_u32(raw: bytes) -> int:
+    """Decode a little-endian uint32 field."""
+    return int.from_bytes(raw, "little")
+
+
+def _decode_datetime_us(raw: bytes) -> str | None:
+    """Decode a little-endian, microseconds-since-epoch uint64 field, or None if zero/out of range."""
+    micros = int.from_bytes(raw, "little")
+    if not micros:
+        return None
+    try:
+        dt = datetime.datetime.fromtimestamp(micros / 1e6, tz=datetime.UTC)
+    except (OSError, OverflowError, ValueError):
+        return None
+    return dt.isoformat(timespec="milliseconds")
+
+
+def _decode_hex(raw: bytes) -> str | None:
+    """Decode a raw byte span as hex, or None if all-zero."""
+    return raw.hex(" ") if any(raw) else None
+
+
+# dtype name -> (byte length, decode function)
+_FIELD_DECODERS: dict[str, tuple[int, Callable[[bytes], str | int | None]]] = {
+    "text32": (32, _decode_text),
+    "text64": (64, _decode_text),
+    "u32": (4, _decode_u32),
+    "datetime_us": (8, _decode_datetime_us),
+    "hex21": (21, _decode_hex),
 }
 
-# Older records (swjVer < 8) seems to have an extra 4-byte field before creator, shifting
-# all other fields. The extra field is a small number (1, 2) in test files, meaning unknown.
-_PACK_TEST_INFO_FIELDS_OLD: dict[str, tuple[int, int]] = {
-    name: (offset + 4, length) for name, (offset, length) in _PACK_TEST_INFO_FIELDS.items()
+
+def _read_fields(record: bytes, fields: dict[str, tuple[int, str]]) -> dict[str, str | int]:
+    """Decode a set of name -> (byte offset, dtype) fields from a record, relative to its start."""
+    metadata: dict[str, str | int] = {}
+    for name, (offset, dtype) in fields.items():
+        length, decode = _FIELD_DECODERS[dtype]
+        value = decode(record[offset : offset + length])
+        if value is not None:
+            metadata[name] = value
+    return metadata
+
+
+# Pack test info: name -> (byte offset, dtype), relative to the start of one record.
+# Keys are best guesses based on current test data.
+_PACK_TEST_INFO_FIELDS: dict[str, tuple[int, str]] = {
+    "start_step_id": (4, "u32"),
+    "creator": (8, "text32"),
+    "sn": (40, "text32"),
+    "UNKNOWN_1": (72, "text32"),  # desc? empty in test data
+    "UNKNOWN_2": (104, "text64"),  # step_file_name? empty in test data
+    "UNKNOWN_3": (168, "text64"),  # step_name? empty in test data
+    "UNKNOWN_4": (232, "text32"),  # battery_model? empty in test data
+    "remarks": (264, "text64"),
+    "start_time": (432, "datetime_us"),
+    "stop_time": (440, "datetime_us"),
 }
 
-# Pack test info little-endian u64 microseconds Unix time.
-_PACK_TEST_INFO_TIMESTAMP_FIELDS: dict[str, int] = {
-    "start_time": 432,
-    "stop_time": 440,
-}
-# Older (swjVer < 8) records have these timestamps at different offset
-_PACK_TEST_INFO_TIMESTAMP_FIELDS_OLD: dict[str, int] = {
-    "start_time": 400,
-    "stop_time": 408,
+# Older records (swjVer < 8) seem to have a sligthly different layout
+_PACK_TEST_INFO_FIELDS_OLD: dict[str, tuple[int, str]] = {
+    "UNKNOWN_19": (4, "u32"),  # too large for a step ID; constant across tests, maybe device-level
+    "UNKNOWN_5": (8, "u32"),
+    "creator": (12, "text32"),
+    "sn": (44, "text32"),
+    "UNKNOWN_6": (76, "text32"),  # desc? empty in test data
+    "UNKNOWN_7": (108, "text64"),  # step_file_name? empty in test data
+    "UNKNOWN_8": (172, "text64"),  # step_name? empty in test data
+    "UNKNOWN_9": (236, "text32"),  # battery_model? empty in test data
+    "remarks": (268, "text64"),
+    "test_id": (396, "u32"),
+    "start_time": (400, "datetime_us"),
+    "stop_time": (408, "datetime_us"),
+    "num_datapoints": (416, "u32"),
 }
 
 
@@ -163,7 +214,7 @@ def _decode_pstring(data: bytes, pos: int) -> tuple[str, int]:
     """Decode one Pascal-style string (1-byte length prefix, no terminator); return (text, next_pos)."""
     length = data[pos]
     raw = data[pos + 1 : pos + 1 + length]
-    return raw.decode("gbk", errors="ignore"), pos + 1 + length
+    return raw.decode("gb2312", errors="ignore"), pos + 1 + length
 
 
 def _read_pack_test_info_old_extension(record: bytes) -> dict[str, str]:
@@ -171,28 +222,50 @@ def _read_pack_test_info_old_extension(record: bytes) -> dict[str, str]:
     try:
         pos = 420
         _bts_version, pos = _decode_pstring(record, pos)  # redundant with the file-wide bts_version search
-        _guid, pos = _decode_pstring(record, pos)
-        _guid_repeat, pos = _decode_pstring(record, pos)
-        equipment_ip, pos = _decode_pstring(record, pos)
-        _unknown, pos = _decode_pstring(record, pos)  # unknown, "[org] - dedicated use" in examples
-        _unknown, pos = _decode_pstring(record, pos)  # unknown
-        _empty, pos = _decode_pstring(record, pos)  # zero-length in real samples
-        _label_repeat, pos = _decode_pstring(record, pos)
+        guid, pos = _decode_pstring(record, pos)
+        guid_repeat, pos = _decode_pstring(record, pos)
+        device_ip, pos = _decode_pstring(record, pos)
+        unknown_5, pos = _decode_pstring(record, pos)  # unknown, "[org] - dedicated use" in examples
+        unknown_6, pos = _decode_pstring(record, pos)  # unknown
+        unknown_7, pos = _decode_pstring(record, pos)  # zero-length in real samples
+        unknown_8, pos = _decode_pstring(record, pos)  # unknown
         pos += 4  # 4 fixed unknown bytes
         server_ip, _pos = _decode_pstring(record, pos)
     except IndexError:
         return {}
-    return {"equipment_ip": equipment_ip, "server_ip": server_ip}
+    return {
+        "guid": guid,
+        "guid2": guid_repeat,
+        "device_ip": device_ip,
+        "server_ip": server_ip,
+        "UNKNOWN_10": unknown_5,
+        "UNKNOWN_11": unknown_6,
+        "UNKNOWN_12": unknown_7,
+        "UNKNOWN_13": unknown_8,
+    }
 
 
-# piLogEx, doesn't seem to be present in the older BTS9.0.3 file
-_PILOGEX_FIELDS: dict[str, tuple[int, int]] = {
-    "server_ip": (223, 32),
-    "hostname": (255, 32),
+# Pack test info tail specific to swjVer >= 8, offsets relative to start of record.
+_PACK_TEST_INFO_FIELDS_NEW_TAIL: dict[str, tuple[int, str]] = {
+    "UNKNOWN_14": (328, "text32"),
+    "server_ip": (360, "text64"),
+    "test_id": (424, "u32"),  # Not very confident
+    "num_datapoints": (428, "u32"),
+    "UNKNOWN_15": (448, "u32"),  # zero in every sample seen
+    "UNKNOWN_16": (452, "u32"),  # decodes to a nonsense 2010-era date, not a real timestamp
+    "UNKNOWN_17": (456, "u32"),  # constant 1 in every sample seen
+    "UNKNOWN_18": (460, "hex21"),  # rest of the record, resembles a pattern also seen in piLogEx
+}
+
+# piLogEx, doesn't seem to be present in the older BTS9.0.3 file.
+# IP is probably device or middle machine, server_ip is usually 127.0.0.1
+_PILOGEX_FIELDS: dict[str, tuple[int, str]] = {
+    "device_ip": (223, "text32"),
+    "hostname": (255, "text32"),
 }
 
 
-def _read_nda_130_log_ex(mm: mmap.mmap) -> dict[str, str]:
+def _read_nda_130_log_ex(mm: mmap.mmap) -> dict[str, str | int]:
     """Read the 'log ex' block from an nda_version 130 file.
 
     The head info 9022 header stores a u64 {begin, length} pointer to this block
@@ -203,14 +276,10 @@ def _read_nda_130_log_ex(mm: mmap.mmap) -> dict[str, str]:
     if not log_ex_begin or not log_ex_len or log_ex_begin + log_ex_len > len(mm):
         return {}
     record = mm[log_ex_begin : log_ex_begin + log_ex_len]
-    return {
-        name: record[offset : offset + length].split(b"\x00", 1)[0].decode("gbk", errors="ignore").strip()
-        for name, (offset, length) in _PILOGEX_FIELDS.items()
-        if offset + length <= len(record)
-    }
+    return _read_fields(record, _PILOGEX_FIELDS)
 
 
-def _read_nda_130_test_info(mm: mmap.mmap) -> dict[str, str]:
+def _read_nda_130_test_info(mm: mmap.mmap) -> dict[str, str | int]:
     """Read records from 'pack test info' from an nda_version 130 file.
 
     The header stores a u64 {begin, length} pointer to this block at fixed offsets 34/42.
@@ -223,28 +292,17 @@ def _read_nda_130_test_info(mm: mmap.mmap) -> dict[str, str]:
     swj_ver = int.from_bytes(record[0:2], "little")
     is_old = swj_ver < 8
     fields = _PACK_TEST_INFO_FIELDS_OLD if is_old else _PACK_TEST_INFO_FIELDS
-    metadata: dict[str, str] = {
-        name: record[offset : offset + length].split(b"\x00", 1)[0].decode("gbk", errors="ignore").strip()
-        for name, (offset, length) in fields.items()
-    }
-    timestamp_fields = _PACK_TEST_INFO_TIMESTAMP_FIELDS_OLD if is_old else _PACK_TEST_INFO_TIMESTAMP_FIELDS
-    for name, offset in timestamp_fields.items():
-        micros = int.from_bytes(record[offset : offset + 8], "little")
-        if micros:
-            try:
-                dt = datetime.datetime.fromtimestamp(micros / 1e6, tz=datetime.UTC)
-            except (OSError, OverflowError, ValueError):
-                # Not confirmed on older files, just skip
-                continue
-            metadata[name] = dt.isoformat(timespec="milliseconds")
+    metadata = _read_fields(record, fields)
     if is_old:
         metadata.update(_read_pack_test_info_old_extension(record))
+    else:
+        metadata.update(_read_fields(record, _PACK_TEST_INFO_FIELDS_NEW_TAIL))
     return metadata
 
 
-def _read_nda_130_metadata(mm: mmap.mmap) -> dict[str, str | float]:
+def _read_nda_130_metadata(mm: mmap.mmap) -> dict[str, str | float | int]:
     """Read metadata specific to nda_version 130 (BTS9.0/9.1)."""
-    metadata: dict[str, str | float] = {}
+    metadata: dict[str, str | float | int] = {}
     subver = int(mm[1024])
     if subver == 85:
         metadata["bts_version"] = "9.1"
@@ -290,17 +348,29 @@ def read_nda_metadata(file: str | Path) -> dict[str, str | int | float]:
     metadata["nda_version"] = nda_version
     metadata.update(_read_nda_version_info(mm))
 
-    # NDA 1-29 fields: header stores {nBegin, nLen} pointers to a device-info block and a test-info
-    # block (remark/creator/SN/barcode/...) rather than fixed absolute offsets - see _read_nda_test_info.
+    # NDA 1-29 fields: header stores {nBegin, nLen} pointers to a device-info block and a test-info block
     if 1 <= nda_version <= 29:
         metadata["active_mass_mg"] = _nda_active_mass_mg(mm, nda_version)
         metadata.update(_read_nda_test_info(mm, nda_version))
 
     # NDA 130 specific fields
     elif nda_version == 130:
+        warnings.warn(
+            (
+                "read_metadata for NDA 130 (BTS9) has not been thoroughly tested due to lack of test data. "
+                "There may be wrong fields or 'UNKNOWN_x' keys present. "
+                "If you can, please share a sample file at "
+                "https://github.com/empaeconversion/fastnda/issues so we can improve reading this format."
+            ),
+            stacklevel=3,
+        )
         metadata.update(_read_nda_130_metadata(mm))
 
-    return metadata
+    # Drop empty UNKNOWN_x fields
+    def _unknown_is_empty(value: str | float) -> bool:
+        return not value.strip("\x00").strip() if isinstance(value, str) else not value
+
+    return {k: v for k, v in metadata.items() if not (k.startswith("UNKNOWN_") and _unknown_is_empty(v))}
 
 
 def _find_header(mm: mmap.mmap, header: bytes | int) -> int:

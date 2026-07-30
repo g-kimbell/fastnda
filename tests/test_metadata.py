@@ -102,11 +102,20 @@ class TestMetaData:
         assert metadata["creator"] == "admin"
         assert metadata["sn"] == ""
         assert metadata["remarks"] == ""
-        assert metadata["note"] == ""
         assert metadata["start_time"] == "2016-04-19T12:21:01.022+00:00"
         assert metadata["stop_time"] == "2016-04-19T13:21:03.143+00:00"
-        assert metadata["equipment_ip"] == "192.168.3.98"
+        assert metadata["UNKNOWN_19"] == 2147082270
+        assert metadata["test_id"] == 61
+        assert metadata["num_datapoints"] == 15567
+        assert metadata["guid"] == "38D34B02BDED1948A70DB98814D67B22"
+        assert metadata["guid2"] == "38D34B02BDED1948A70DB98814D67B22"
+        assert metadata["device_ip"] == "192.168.3.98"
         assert metadata["server_ip"] == "192.168.3.110"
+        assert metadata["UNKNOWN_5"] == 1
+        assert metadata["UNKNOWN_10"] == "武工专用"
+        assert "UNKNOWN_11" not in metadata
+        assert "UNKNOWN_12" not in metadata
+        assert metadata["UNKNOWN_13"] == "武工专用"
 
     def test_nda130_sintef(self) -> None:
         """Test reading metadata from a BTS9.1.5 nda_version 130 file."""
@@ -117,10 +126,18 @@ class TestMetaData:
         assert metadata["bts_version"] == "9.1.5.7.20250527.R5"
         assert metadata["creator"] == "admin"
         assert metadata["sn"] == "2025-12"
-        assert metadata["note"] == "C30 Charge"
+        assert metadata["remarks"] == "C30 Charge"
+        assert metadata["start_step_id"] == 1
         assert metadata["start_time"] == "2025-12-22T08:44:24.914+00:00"
         assert metadata["stop_time"] == "2025-12-24T09:33:13.562+00:00"
-        assert metadata["server_ip"] == "192.168.1.250"
+        assert metadata["UNKNOWN_14"] == "Google Pixel 10"
+        assert metadata["server_ip"] == "127.0.0.1"
+        assert metadata["test_id"] == 26
+        assert metadata["num_datapoints"] == 17587
+        assert metadata["UNKNOWN_16"] == 1267237200
+        assert metadata["UNKNOWN_17"] == 1
+        assert metadata["UNKNOWN_18"] == "1b 30 02 10 10 02 30 1b 81 02 01 02 01 01 00 00 00 00 00 00 00"
+        assert metadata["device_ip"] == "192.168.1.250"
         assert metadata["hostname"] == "SINTEFPC10925"
 
     def test_nda130_testfile(self) -> None:
@@ -132,8 +149,16 @@ class TestMetaData:
         assert metadata["bts_version"] == "9.1.5.7.20240403.R5"
         assert metadata["creator"] == "admin"
         assert metadata["sn"] == "P_DCH-CH"
-        assert metadata["note"] == "cell16"
+        assert metadata["remarks"] == "cell16"
         assert metadata["start_time"] == "2024-05-27T08:02:48.782+00:00"
         assert metadata["stop_time"] == "2024-05-28T08:56:24.076+00:00"
-        assert metadata["server_ip"] == "192.168.1.250"
+        assert metadata["start_step_id"] == 1
+        assert metadata["UNKNOWN_14"] == "VAPCELL_F60_6000"
+        assert metadata["server_ip"] == ""
+        assert metadata["test_id"] == 43
+        assert metadata["num_datapoints"] == 6670
+        assert metadata["UNKNOWN_16"] == 1269091200
+        assert metadata["UNKNOWN_17"] == 1
+        assert metadata["UNKNOWN_18"] == "10 93 97 12 12 97 93 10 81 08 07 08 07 01 00 00 00 00 00 00 00"
+        assert metadata["device_ip"] == "192.168.1.250"
         assert metadata["hostname"] == "LENOVO-L0X1245"
