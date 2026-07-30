@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://github.com/user-attachments/assets/9fb435b9-ca5b-4d68-9437-2de86bef45ec" width="400" align="center" alt="aurora-biologic logo">
+  <img src="https://github.com/user-attachments/assets/9fb435b9-ca5b-4d68-9437-2de86bef45ec" width="400" align="center" alt="fastnda logo">
 </h1>
 
 <br>
@@ -69,6 +69,7 @@ fastnda batch-convert "my/folder/" "output/folder/"     # Save all files in a di
 
 fastnda print-metadata "my/file.ndax"                   # Print metadata to terminal
 fastnda convert-metadata "my/file.ndax"                 # Convert metadata to my/file.json
+fastnda batch-convert-metadata "my/folder/" --recursive # Batch convert metadata
 ```
 
 
@@ -80,7 +81,8 @@ Usually this is due to a hardware setting or a file type we have not seen before
 ## Notes
 
 This package adheres closely to the outputs from Neware's BTSDA, but there are some differences:
-  - Capacity and energy are one column, charge is positive and discharge is negative
+  - In Neware, capacity (and energy) is split into charge and discharge columns, and resets every step
+  - `fastnda` records the *net* capacity (and energy), resetting every step
   - A negative current during charge will count negatively to the capacity, in Neware it is ignored
   - In some Neware files, cycles are only counted when the step index goes backwards
   - Here, a cycle is when a charge -> discharge has been completed
@@ -100,11 +102,11 @@ Other benefits of using `fastnda` or `NewareNDA` over Neware's BTSDA:
   - Different BTSDA versions need to be installed to open different .nda or .ndax files
 
 Pandas compatibility
- - Old versions of `pyarrow` had an issue converting categorical columns to `pandas`, fixed in 23.0.0.
- - For compatibility with `pandas` in parquet/arrow/feather files, you can:
-   - Update to `pyarrow >= 23.0.0`.
-   - Convert to `pandas` first with `to_pandas()` or `--pandas`.
-   - Use integer codes for the categorical columns with `raw_categories=True` or `--raw-categories`. 
+  - Old versions of `pyarrow` had an issue converting categorical columns to `pandas`, fixed in 23.0.0.
+  - For compatibility with `pandas` in parquet/arrow/feather files, you can:
+    - Update to `pyarrow >= 23.0.0`.
+    - Convert to `pandas` first with `to_pandas()` or `--pandas`.
+    - Use integer codes for the categorical columns with `raw_categories=True` or `--raw-categories`.
 
 
 ## Contributions
