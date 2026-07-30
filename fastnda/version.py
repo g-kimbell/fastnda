@@ -1,4 +1,6 @@
 # Copyright © 2026, Empa.
-"""Version information automatically updated by bumpver."""
+"""Package version, read from the installed distribution metadata."""
 
-__version__ = "1.2.0"
+from importlib.metadata import version
+
+__version__ = version("fastnda")
