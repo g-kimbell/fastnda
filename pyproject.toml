@@ -27,16 +27,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "bumpver>=2025.1131",
-    "pre-commit>=4.2.0",
-    "pandas>=2.3.1",
-    "pyarrow>=23.0.0",
-    "pytest>=8.4.1",
-    "ruff>=0.16.0",
-    "tables>=3.11.0; python_version >= '3.11'",
-    "tables>=3.10.0,<3.11.0; python_version < '3.11'",
-]
 extras = [
     "pandas>=2.3.1",
     "pyarrow>=23.0.0",
@@ -44,8 +34,21 @@ extras = [
     "tables>=3.10.0,<3.11.0; python_version < '3.11'",
 ]
 
+[dependency-groups]
+dev = [
+    "fastnda[extras]",
+    "bumpver>=2025.1131",
+    "pre-commit>=4.2.0",
+    "pytest>=8.4.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.0",
+]
+
 [project.scripts]
 fastnda = "fastnda.cli:app"
+
+[tool.uv]
+default-groups = ["dev"]
 
 [tool.ruff]
 line-length = 120
