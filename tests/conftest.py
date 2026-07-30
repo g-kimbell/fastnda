@@ -2,9 +2,14 @@
 """Default to tests/test_data, allow users to change test data folder."""
 
 import re
+from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from _pytest.terminal import TerminalReporter
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -81,3 +86,40 @@ def file_pair(request: pytest.FixtureRequest) -> tuple:
 def test_file() -> Path:
     """Return a single .ndax file, for tests that do not need depend on file internals."""
     return Path(__file__).parent / "test_data" / "nw4-120-1-6-53.ndax"
+
+
+@pytest.fixture
+def note(request: pytest.FixtureRequest) -> Callable[[str], None]:
+    """Attach a caveat to a passing test, reported as NOTE instead of a Python warning."""
+
+    def _note(message: str) -> None:
+        request.node.user_properties.append(("note", message))
+
+    return _note
+
+
+def pytest_report_teststatus(
+    report: "pytest.CollectReport | pytest.TestReport",
+) -> "tuple[str, str, tuple[str, dict[str, bool]]] | None":
+    """Report passing tests that called note() as NOTE, in their own 'notes' category."""
+    if (
+        isinstance(report, pytest.TestReport)
+        and report.when == "call"
+        and report.passed
+        and any(name == "note" for name, _ in report.user_properties)
+    ):
+        return "notes", "n", ("NOTE", {"yellow": True})
+    return None
+
+
+def pytest_terminal_summary(terminalreporter: "TerminalReporter") -> None:
+    """List NOTE messages in their own summary section, like the xfail summary."""
+    reports = terminalreporter.stats.get("notes", [])
+    if not reports:
+        return
+    terminalreporter.write_sep("=", "passed with notes", yellow=True)
+    for report in reports:
+        for name, message in report.user_properties:
+            if name == "note":
+                terminalreporter.write("NOTE", yellow=True)
+                terminalreporter.write_line(f" {report.nodeid} - {message}")

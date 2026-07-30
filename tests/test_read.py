@@ -3,7 +3,6 @@
 
 import importlib
 import re
-import warnings
 from collections.abc import Callable, Generator
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -125,7 +124,7 @@ class TestRead:
             check_names=False,
         )
 
-    def test_cycle(self, parsed_data: tuple) -> None:
+    def test_cycle(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Cycle should be exact when using raw cycle_mode."""
         df, df_ref = parsed_data
         # If the default is wrong, check if cycle_mode auto is correct
@@ -139,7 +138,7 @@ class TestRead:
                 df_ref["Cycle Index"],
                 check_names=False,
             )
-            warnings.warn("Cycles do not match with 'raw' cycle_mode, only with 'auto'", stacklevel=2)
+            note("Cycles do not match with 'raw' cycle_mode, only with 'auto'")
 
     def test_index(self, parsed_data: tuple) -> None:
         """Index should be UInt32 monotonically increasing by 1."""
@@ -150,7 +149,7 @@ class TestRead:
             check_names=False,
         )
 
-    def test_step_time(self, parsed_data: tuple) -> None:
+    def test_step_time(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Step time should agree within 1 us."""
         df, df_ref = parsed_data
         if len(df) == 0 and len(df_ref) == 0:
@@ -169,11 +168,11 @@ class TestRead:
             if max_diff is not None and max_diff > threshold:
                 msg = f"Step time columns differ by up to {max_diff:.2e}"
                 raise ValueError(msg)
-        # Check earliest time diff, warn if over 1 us
+        # Check earliest time diff, note if over 1 us
         if max_diff is not None and max_diff > 5e-7:
-            warnings.warn(f"Step time only matches within {max_diff:.2e} s", stacklevel=2)
+            note(f"Step time only matches within {max_diff:.2e} s")
 
-    def test_total_time(self, parsed_data: tuple) -> None:
+    def test_total_time(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Total time should agree within 1 us."""
         df, df_ref = parsed_data
         if len(df) == 0 and len(df_ref) == 0:
@@ -192,9 +191,9 @@ class TestRead:
             if max_diff is not None and max_diff > threshold:
                 msg = f"Total time columns differ by up to {max_diff:.2e}"
                 raise ValueError(msg)
-        # Check earliest time diff, warn if over 1 us
+        # Check earliest time diff, note if over 1 us
         if max_diff is not None and max_diff > 5e-7:
-            warnings.warn(f"Total time only matches within {max_diff:.2e} s", stacklevel=2)
+            note(f"Total time only matches within {max_diff:.2e} s")
 
     def test_datetime(self, parsed_data: tuple) -> None:
         """Date should agree within 1 us."""
@@ -253,7 +252,7 @@ class TestRead:
                 msg = "Capacity columns are different."
                 raise ValueError(msg)
 
-    def test_energy(self, parsed_data: tuple) -> None:
+    def test_energy(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Neware energy can be recorded 0.1 mWs, check to 3e-5 mWh."""
         df, df_ref = parsed_data
         # Neware capacity can be absolute for both charge and discharge
@@ -272,7 +271,7 @@ class TestRead:
                 raise ValueError(msg)
             if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
                 msg = f"Energy columns differ by up to {max(abs_diff):.2e} mWh (or {max(rel_diff) * 100:2g}%)."
-                warnings.warn(msg, stacklevel=2)
+                note(msg)
 
     def test_capacity_energy_sign(self, parsed_data: tuple) -> None:
         """Capacity/energy should have same sign as current."""
