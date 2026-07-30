@@ -111,7 +111,7 @@ Pandas compatibility
 
 If you have problems reading data, raise an issue on GitHub.
 
-Code contributions are very welcome, clone the repo and use `pip install -e .[dev]` for developer dependencies.
+Code contributions are very welcome, clone the repo and use `uv sync` or `pip install -e . --group dev` for developer dependencies.
 
 
 ## Acknowledgements
