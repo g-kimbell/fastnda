@@ -8,7 +8,17 @@ import pytest
 
 from fastnda._ndc import read_ndc
 from fastnda._ndc.ndc_aux import read_ndc_aux_11, read_ndc_aux_16
-from fastnda.nda import _read_nda_5, _read_nda_29, read_nda, read_nda_metadata
+from fastnda.nda import (
+    _decode_datetime_us,
+    _read_nda_5,
+    _read_nda_29,
+    _read_nda_130_metadata,
+    _read_nda_130_test_info,
+    _read_nda_test_info,
+    _read_pack_test_info_old_extension,
+    read_nda,
+    read_nda_metadata,
+)
 
 
 class TestMissing:
@@ -44,3 +54,23 @@ class TestMissing:
             _read_nda_29(mm)
         with pytest.raises(EOFError):
             _read_nda_5(mm)
+
+    def test_missing_test_info(self) -> None:
+        """Zeroed test info pointers give empty metadata."""
+        mm = mmap.mmap(-1, 2048)
+        assert _read_nda_test_info(mm, 29) == {}
+        assert _read_nda_130_test_info(mm) == {}
+
+    def test_decode_datetime_invalid(self) -> None:
+        """Zero and out-of-range timestamps decode to None."""
+        assert _decode_datetime_us(bytes(8)) is None
+        assert _decode_datetime_us(b"\xff" * 8) is None
+
+    def test_pack_test_info_old_extension_truncated(self) -> None:
+        """Record too short for the pstring section gives empty metadata."""
+        assert _read_pack_test_info_old_extension(b"") == {}
+
+    def test_nda_130_metadata_no_version_string(self) -> None:
+        """Header without a version string skips the BTS version field."""
+        metadata = _read_nda_130_metadata(mmap.mmap(-1, 2048))
+        assert "bts_version" not in metadata
