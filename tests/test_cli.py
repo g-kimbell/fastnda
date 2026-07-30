@@ -24,6 +24,7 @@ class TestCliWithOptionalDeps:
     test_file = current_folder / "test_data" / "21_10_7_85.ndax"
     ref_df = fastnda.read(test_file)
     ref_df_raw_categories = fastnda.read(test_file, raw_categories=True)
+    ref_metadata = fastnda.read_metadata(test_file)
 
     def test_convert_hdf5(self, tmp_path: Path) -> None:
         """Converting HDF5 with pandas."""
@@ -479,6 +480,107 @@ class TestCliWithOptionalDeps:
         assert output_2.exists()
         df = pl.read_parquet(output_1)
         assert "current_ampere" in df.columns
+
+    def test_batch_convert_metadata(self, tmp_path: Path) -> None:
+        """Basic batch converting metadata."""
+        copied_file_1 = tmp_path / (self.test_file.stem + "_1.ndax")
+        copied_file_2 = tmp_path / (self.test_file.stem + "_2.ndax")
+        shutil.copy(self.test_file, copied_file_1)
+        shutil.copy(self.test_file, copied_file_2)
+        output_1 = copied_file_1.with_suffix(".json")
+        output_2 = copied_file_2.with_suffix(".json")
+        result = self.runner.invoke(
+            app,
+            [
+                "batch-convert-metadata",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0
+        assert output_1.exists()
+        assert output_2.exists()
+        with output_1.open("r") as f:
+            metadata = json.load(f)
+        assert metadata == self.ref_metadata
+
+    def test_recursive_batch_convert_metadata(self, tmp_path: Path) -> None:
+        """Recursive batch metadata converting requires -r or --recursive."""
+        (tmp_path / "subfolder").mkdir()
+        copied_file_1 = tmp_path / "subfolder" / (self.test_file.stem + "_1.ndax")
+        shutil.copy(self.test_file, copied_file_1)
+        output_1 = copied_file_1.with_suffix(".json")
+        result = self.runner.invoke(
+            app,
+            [
+                "batch-convert-metadata",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 1
+        assert not output_1.exists()
+        assert "--recursive" in str(result.exception)
+
+        result = self.runner.invoke(
+            app,
+            ["batch-convert-metadata", str(tmp_path), "--recursive"],
+        )
+        assert result.exit_code == 0
+        assert output_1.exists()
+
+    def test_batch_convert_metadata_bad_inputs(self, tmp_path: Path) -> None:
+        """Batch converting metadata with bad inputs."""
+        result = self.runner.invoke(
+            app,
+            [
+                "batch-convert-metadata",
+                str(self.test_file),
+            ],
+        )
+        assert result.exit_code == 1
+        assert "not a folder" in str(result.exception)
+
+        result = self.runner.invoke(
+            app,
+            [
+                "batch-convert-metadata",
+                str(tmp_path / "subfolder" / "doesntexist"),
+            ],
+        )
+        assert result.exit_code == 1
+        assert "does not exist" in str(result.exception)
+
+    def test_batch_convert_metadata_bad_files(self, tmp_path: Path) -> None:
+        """Batch convert metadata continues even if there is a bad file."""
+        copied_file_1 = tmp_path / (self.test_file.stem + "_1.nda")
+        copied_file_2 = tmp_path / (self.test_file.stem + "_2.ndax")
+        with copied_file_1.open("w") as f:
+            f.write("this is not a real ndax file")
+        shutil.copy(self.test_file, copied_file_2)
+        output_1 = copied_file_1.with_suffix(".json")
+        output_2 = copied_file_2.with_suffix(".json")
+        result = self.runner.invoke(
+            app,
+            [
+                "batch-convert-metadata",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0
+        assert not output_1.exists()
+        assert output_2.exists()
+
+    def test_convert_metadata_compact(self, tmp_path: Path) -> None:
+        """--indent -1 writes compact single-line json."""
+        output = tmp_path / self.test_file.with_suffix(".json").name
+        result = self.runner.invoke(
+            app,
+            ["convert-metadata", str(self.test_file), str(output), "--indent", "-1"],
+        )
+        assert result.exit_code == 0
+        with output.open("r") as f:
+            content = f.read()
+        assert "\n" not in content
+        assert json.loads(content) == self.ref_metadata
 
     def test_version(self) -> None:
         """--version prints the version."""

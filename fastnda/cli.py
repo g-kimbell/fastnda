@@ -71,6 +71,12 @@ RawCategoriesOption = Annotated[
         "--raw-categories", help="Store step_type categorical column as integer codes, e.g. 1 instead of 'CC_Chg'."
     ),
 ]
+IndentOption = Annotated[
+    int,
+    typer.Option(
+        "--indent", min=-1, help="Spaces of indentation in JSON output. Use -1 for compact single-line output."
+    ),
+]
 
 
 def _version_callback(*, value: bool) -> None:
@@ -259,7 +265,7 @@ def batch_convert(  # noqa: D417
         out_folder = in_folder
 
     in_files = in_folder.rglob("*.nda*") if recursive else in_folder.glob("*.nda*")
-    file_list = list(in_files)
+    file_list = [f for f in in_files if f.suffix.lower() in {".nda", ".ndax"}]
     if len(file_list) == 0:
         msg = "No .nda or .ndax files found."
         if not recursive:
@@ -270,7 +276,7 @@ def batch_convert(  # noqa: D417
     LOGGER.info("Found %d files to convert in %s.", len(file_list), in_folder)
     for in_file in tqdm(file_list, desc="Converting files", disable=disable_tqdm):
         out_file = out_folder / in_file.relative_to(in_folder).with_suffix("." + file_format)
-        out_file.parent.mkdir(exist_ok=True)
+        out_file.parent.mkdir(exist_ok=True, parents=True)
         try:
             _convert_with_type(
                 in_file, out_file, file_format, cycle_mode, columns, pandas=pandas, raw_categories=raw_categories
@@ -326,27 +332,91 @@ def _convert_with_type(
             df.to_pandas().to_hdf(out_file, key="data", format="table")
 
 
+def _json_indent(indent: int) -> int | None:
+    return indent if indent >= 0 else None
+
+
 @app.command()
-def print_metadata(in_file: InFileArgument, indent: int | None = 4) -> None:
+def print_metadata(in_file: InFileArgument, indent: IndentOption = 4) -> None:
     """Print file metadata to terminal."""
     from fastnda.main import read_metadata
 
-    typer.echo(json.dumps(read_metadata(in_file), indent=indent))
+    typer.echo(json.dumps(read_metadata(in_file), indent=_json_indent(indent)))
 
 
 @app.command()
 def convert_metadata(
     in_file: InFileArgument,
     out_file: OutFileArgument = None,
-    indent: int | None = 4,
+    indent: IndentOption = 4,
 ) -> None:
     """Convert .nda / .ndax metadata to json."""
     from fastnda.main import read_metadata
 
     if out_file is None:
         out_file = in_file.with_suffix(".json")
+    metadata = read_metadata(in_file)
     with out_file.open("w") as f:
-        json.dump(read_metadata(in_file), f, indent=indent)
+        json.dump(metadata, f, indent=_json_indent(indent))
+
+
+@app.command()
+def batch_convert_metadata(
+    ctx: typer.Context,
+    in_folder: InFolderArgument,
+    out_folder: OutFolderArgument = None,
+    indent: IndentOption = 4,
+    *,
+    recursive: RecursiveOption = False,
+) -> None:
+    """Batch convert .nda / .ndax metadata to json."""
+    from tqdm import tqdm
+
+    from fastnda.main import read_metadata
+
+    class TqdmHandler(logging.Handler):
+        """Class to handle logs while using tqdm progress bar."""
+
+        def emit(self, record: logging.LogRecord) -> None:
+            """Write log to console."""
+            msg = self.format(record)
+            tqdm.write(msg)
+
+    handler = TqdmHandler()
+    handler.setFormatter(logging.Formatter("%(name)s:%(levelname)s: %(message)s"))
+    root = logging.getLogger()
+    root.addHandler(handler)
+
+    if not in_folder.exists():
+        msg = f"Folder {in_folder} does not exist."
+        raise FileNotFoundError(msg)
+
+    if not in_folder.is_dir():
+        msg = f"{in_folder} is not a folder."
+        raise FileNotFoundError(msg)
+
+    if out_folder is None:
+        out_folder = in_folder
+
+    in_files = in_folder.rglob("*.nda*") if recursive else in_folder.glob("*.nda*")
+    file_list = [f for f in in_files if f.suffix.lower() in {".nda", ".ndax"}]
+    if len(file_list) == 0:
+        msg = "No .nda or .ndax files found."
+        if not recursive:
+            msg += " To search in sub-folders use --recursive or -r."
+        raise FileNotFoundError(msg)
+
+    disable_tqdm = ctx.obj.get("verbosity", 0) <= -2
+    LOGGER.info("Found %d files to convert metadata in %s.", len(file_list), in_folder)
+    for in_file in tqdm(file_list, desc="Converting metadata", disable=disable_tqdm):
+        out_file = out_folder / in_file.relative_to(in_folder).with_suffix(".json")
+        out_file.parent.mkdir(exist_ok=True, parents=True)
+        try:
+            metadata = read_metadata(in_file)
+            with out_file.open("w") as f:
+                json.dump(metadata, f, indent=_json_indent(indent))
+        except (ValueError, BadZipFile, KeyError, AttributeError):
+            LOGGER.exception("Failed to convert metadata for %s.", in_file)
 
 
 if __name__ == "__main__":
