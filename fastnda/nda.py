@@ -145,7 +145,7 @@ def _decode_datetime_us(raw: bytes) -> str | None:
     if not micros:
         return None
     try:
-        dt = datetime.datetime.fromtimestamp(micros / 1e6, tz=datetime.UTC)
+        dt = datetime.datetime.fromtimestamp(micros / 1e6, tz=datetime.timezone.utc)
     except (OSError, OverflowError, ValueError):
         return None
     return dt.isoformat(timespec="milliseconds")
