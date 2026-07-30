@@ -455,11 +455,11 @@ def nda_reader_call_tracker() -> Generator[set[str], None, None]:
 _DISTINCT_NDA_READER_NAMES = sorted({r.__name__ for r in _NDA_READERS.values() if r is not None})
 
 
-class TestNdaVersionCoverage:
+class TestNdaCov:
     """Track which NDA reader functions are tested with real data."""
 
     @pytest.mark.parametrize("reader_name", _DISTINCT_NDA_READER_NAMES)
-    def test_reader_called_with_real_data(self, reader_name: str, nda_reader_call_tracker: set[str]) -> None:
+    def test_reader_validated(self, reader_name: str, nda_reader_call_tracker: set[str]) -> None:
         """Confirm this reader function was actually invoked by TestRead's real-data reads."""
         if reader_name not in nda_reader_call_tracker:
             pytest.xfail(f"{reader_name} was never tested with a real data file.")
@@ -517,11 +517,11 @@ def ndc_reader_call_tracker() -> Generator[set[tuple[tuple[int, int], str]], Non
 _DISTINCT_NDC_READER_NAMES = sorted({r.__name__ for r in _NDC_READERS.values() if r is not None})
 
 
-class TestNdcVersionCoverage:
+class TestNdcCov:
     """Track which NDC reader functions are tested with real data."""
 
     @pytest.mark.parametrize("reader_name", _DISTINCT_NDC_READER_NAMES)
-    def test_reader_called_with_real_data(
+    def test_reader_validated(
         self, reader_name: str, ndc_reader_call_tracker: set[tuple[tuple[int, int], str]]
     ) -> None:
         """Confirm this reader function was actually invoked by TestRead's real-data reads."""
