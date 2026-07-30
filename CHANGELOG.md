@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0rc1] - 2026-07-30
+### Added
+- Support for all known .ndax (7 new filetypes)
+- Support for all known .nda (24 new filetypes)
+- Improved .nda metadata reading
+- `batch-convert-metadata` CLI command
+- `--version` CLI flag
+
+### Changed
+- Performance improvements
+
 ## [1.2.0] - 2026-06-12
 ### Added
 - "bdf-pref" for bdf preferred columns
