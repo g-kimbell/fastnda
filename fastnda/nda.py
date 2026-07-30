@@ -4,6 +4,7 @@
 import datetime
 import logging
 import mmap
+import re
 import warnings
 from collections.abc import Callable
 from pathlib import Path
@@ -221,7 +222,7 @@ def _read_pack_test_info_old_extension(record: bytes) -> dict[str, str]:
     """Read records from 'pack test info' block in swjVer < 8."""
     try:
         pos = 420
-        _bts_version, pos = _decode_pstring(record, pos)  # redundant with the file-wide bts_version search
+        _bts_version, pos = _decode_pstring(record, pos)
         guid, pos = _decode_pstring(record, pos)
         guid_repeat, pos = _decode_pstring(record, pos)
         device_ip, pos = _decode_pstring(record, pos)
@@ -300,22 +301,18 @@ def _read_nda_130_test_info(mm: mmap.mmap) -> dict[str, str | int]:
     return metadata
 
 
+# Version string like "9.1.5.7.20250527.R5", 4+ dot-groups
+_BTS_VERSION_RE = re.compile(rb"\d+(?:\.[\dA-Za-z]+){4,}")
+
+
 def _read_nda_130_metadata(mm: mmap.mmap) -> dict[str, str | float | int]:
     """Read metadata specific to nda_version 130 (BTS9.0/9.1)."""
     metadata: dict[str, str | float | int] = {}
-    subver = int(mm[1024])
-    if subver == 85:
-        metadata["bts_version"] = "9.1"
-        ver = mm.find(b"9.1.")
-    elif subver == 18:
-        metadata["bts_version"] = "9.0"
-        ver = mm.find(b"9.0.")
+    match = _BTS_VERSION_RE.search(mm[:2048])
+    if match:
+        metadata["bts_version"] = match.group().decode()
     else:
-        ver = -1
-    if ver != -1:
-        end = mm.find(b"\x00", ver)
-        if end != 1:
-            metadata["bts_version"] = mm[ver:end].decode()
+        logger.info("BTS version not found in header.")
 
     metadata["active_mass_mg"] = _nda_active_mass_mg(mm, 130)
     metadata.update(_read_nda_130_test_info(mm))
