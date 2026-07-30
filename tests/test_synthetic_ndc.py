@@ -1324,6 +1324,7 @@ class TestUnverifiedFormatWarning:
 class TestReadNdaxAuxScaling:
     """read_ndax() applies AUX_CHL_SCALE_MAP when merging a generic ('?') aux channel."""
 
+    @pytest.mark.filterwarnings("ignore::fastnda.utils.UnverifiedFormatWarning")
     def test_current_aux_channel_is_scaled_a_to_ma(self, tmp_path: Path) -> None:
         """A ChlType=104 (current) aux channel is renamed to current_mA and scaled A -> mA."""
         main_dtype = np.dtype(TestReadNdcMain14.LAYOUT)
