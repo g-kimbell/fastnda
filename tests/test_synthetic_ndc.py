@@ -481,6 +481,106 @@ class TestReadNdcMain6:
         _assert_col(df, "step_count", [1, 2])
 
 
+class TestReadNdcMain7:
+    """NdcData7 (ndc version 7): per-file schema declared via NdcHead.nDataType, walked into a dtype."""
+
+    FIELD_CODES: ClassVar[list[int]] = [6, 7, 8, 9, 12, 13, 14, 16, 17, 18, 19, 20, 21, 29, 53]
+    LAYOUT: ClassVar[list[tuple[str, str]]] = [
+        ("index", "<u4"),
+        ("cycle_count", "<u4"),
+        ("step_index", "<u1"),
+        ("step_type", "<u1"),
+        ("step_time_s", "<u8"),
+        ("voltage_V", "<i4"),
+        ("current_mA", "<i4"),
+        ("temperature_degC", "<i2"),
+        ("charge_capacity_mAh", "<i8"),
+        ("discharge_capacity_mAh", "<i8"),
+        ("charge_energy_mWh", "<i8"),
+        ("discharge_energy_mWh", "<i8"),
+        ("atime_year", "<u2"),
+        ("atime_month", "<u1"),
+        ("atime_day", "<u1"),
+        ("atime_hour", "<u1"),
+        ("atime_minute", "<u1"),
+        ("atime_second", "<u1"),
+        ("total_time_s", "<u8"),
+        ("atime_ms", "<u2"),
+    ]
+    DEFAULTS: ClassVar[dict[str, int]] = {"atime_year": 2024, "atime_month": 1, "atime_day": 2}
+
+    @staticmethod
+    def _make_header(codes: list[int]) -> bytes:
+        header = bytearray(4096)
+        header[0] = 1  # filetype
+        header[2] = 7  # version
+        n_data_type = codes + [0] * (40 - len(codes))
+        header[13 : 13 + 4 * 40] = struct.pack("<40i", *n_data_type)
+        return bytes(header)
+
+    def test_decodes_expected_values(self) -> None:
+        """Create synthetic ndc, read back, check against expected values.
+
+        Raw voltage is V*10000, raw capacity/energy is mAs|mWs / 3600, current is unscaled,
+        step/total time and ATime are ms, ATime_t (Y/M/D/h/m/s) + ATimeMs combine into unix_time_s.
+        """
+        header = self._make_header(self.FIELD_CODES)
+        dtype = ndc_main._ndc7_schema(header)
+        assert dtype == np.dtype(self.LAYOUT)
+
+        rows = _build_rows(
+            self.LAYOUT,
+            self.DEFAULTS,
+            columns={
+                "index": [1, 2],
+                "cycle_count": [0, 1],
+                "step_index": [1, 2],
+                "step_type": [1, 2],
+                "step_time_s": [10000, 20000],
+                "voltage_V": [36000, 35000],
+                "current_mA": [200, -150],
+                "temperature_degC": [250, 260],
+                "charge_capacity_mAh": [1800, 0],
+                "discharge_capacity_mAh": [0, 900],
+                "charge_energy_mWh": [3600, 0],
+                "discharge_energy_mWh": [0, 1800],
+                "atime_hour": [3, 3],
+                "atime_minute": [4, 4],
+                "atime_second": [5, 6],
+                "total_time_s": [20000, 40000],
+                "atime_ms": [500, 0],
+            },
+        )
+        row_bytes = [rows[i * dtype.itemsize : (i + 1) * dtype.itemsize] for i in range(2)]
+        gen = _make_ndc_file(dtype, row_bytes, filetype=1, version=7)
+        buf = header + gen[len(header) :]
+
+        df = ndc_main.read_ndc_main_7(buf)
+
+        _assert_col(df, "index", [1, 2])
+        _assert_col(df, "cycle_count", [1, 2])
+        _assert_col(df, "step_index", [1, 2])
+        _assert_col(df, "step_time_s", [10.0, 20.0])
+        _assert_col(df, "voltage_V", [3.6, 3.5])
+        _assert_col(df, "current_mA", [200, -150])
+        _assert_col(df, "temperature_degC", [25.0, 26.0])
+        _assert_col(df, "charge_capacity_mAh", [0.5, 0.0])
+        _assert_col(df, "discharge_capacity_mAh", [0.0, 0.25])
+        _assert_col(df, "charge_energy_mWh", [1.0, 0.0])
+        _assert_col(df, "discharge_energy_mWh", [0.0, 0.5])
+        _assert_col(df, "total_time_s", [20.0, 40.0])
+        _assert_col(df, "unix_time_s", [1704164645.5, 1704164646.0])
+        _assert_col(df, "step_count", [1, 2])
+        for col in ("atime_year", "atime_month", "atime_day", "atime_hour", "atime_minute", "atime_second", "atime_ms"):
+            assert col not in df.columns
+
+    def test_unrecognized_field_code_raises(self) -> None:
+        """An nDataType code with no known byte size makes every later offset unrecoverable."""
+        header = self._make_header([6, 999])
+        with pytest.raises(NotImplementedError, match="unrecognized field type code"):
+            ndc_main._ndc7_schema(header)
+
+
 class TestReadNdcRunInfo8:
     """DFDATARunInfo_V8 (ndc version 8): new-format container, no wATimeMS field."""
 

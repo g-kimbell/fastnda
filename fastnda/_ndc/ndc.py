@@ -56,9 +56,9 @@ _NDC_READERS: dict[tuple[int, int], Callable[[bytes], pl.DataFrame] | None] = {
     (6, 1): ndc_main.read_ndc_main_6,
     (6, 5): ndc_aux.read_ndc_aux_6,
     (6, 7): ndc_step.read_ndc_step_6,
-    # ndax 7 - data has a per-file-configurable custom data path, would need more investigation
-    (7, 1): None,
-    (7, 5): None,
+    # ndax 7 - per-file-configurable columns, both main and aux use same reader
+    (7, 1): ndc_main.read_ndc_main_7,
+    (7, 5): ndc_main.read_ndc_main_7,
     # ndax 8
     (8, 1): ndc_main.read_ndc_main_14,
     (8, 5): ndc_aux.read_ndc_aux_6,
