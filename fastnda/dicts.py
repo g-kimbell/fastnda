@@ -81,6 +81,7 @@ DTYPE_MAP: Mapping[str, type[pl.DataType]] = MappingProxyType(
 )
 
 # Current value multiplier based on instrument Range setting
+# Not used any more, utils._range_to_mult() is used instead, left for backwards compatibility
 MULTIPLIER_MAP = MappingProxyType(
     {
         -100000000: 1e1,

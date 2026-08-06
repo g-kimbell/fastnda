@@ -8,8 +8,7 @@ import numpy as np
 import polars as pl
 
 from fastnda._ndc.ndc_utils import bytes_to_df
-from fastnda.dicts import MULTIPLIER_MAP
-from fastnda.utils import _count_changes
+from fastnda.utils import _count_changes, _range_to_mult
 
 
 def read_ndc_main_1(buf: bytes) -> pl.DataFrame:
@@ -46,7 +45,7 @@ def read_ndc_main_1(buf: bytes) -> pl.DataFrame:
                 pl.col("cycle_count") + 1,
                 pl.col("step_time_s").cast(pl.Float64) * 1e-3,
                 pl.col("voltage_V").cast(pl.Float32) * 1e-4,
-                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
+                _range_to_mult(pl.col("range")).alias("multiplier"),
                 pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
                     "timestamp"
                 ),
@@ -104,7 +103,7 @@ def read_ndc_main_2(buf: bytes) -> pl.DataFrame:
                 pl.col("cycle_count") + 1,
                 pl.col("step_time_s").cast(pl.Float64) * 1e-3,
                 pl.col("voltage_V").cast(pl.Float32) * 1e-4,
-                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
+                _range_to_mult(pl.col("range")).alias("multiplier"),
                 pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
                     "timestamp"
                 ),
@@ -162,7 +161,7 @@ def read_ndc_main_5(buf: bytes) -> pl.DataFrame:
                 pl.col("cycle_count") + 1,
                 pl.col("step_time_s").cast(pl.Float64) * 1e-3,
                 pl.col("voltage_V").cast(pl.Float32) * 1e-4,
-                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
+                _range_to_mult(pl.col("range")).alias("multiplier"),
                 pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
                     "timestamp"
                 ),

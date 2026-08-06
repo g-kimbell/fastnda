@@ -71,5 +71,28 @@ def _id_first_state(df: pl.DataFrame) -> Literal["chg", "dchg"]:
     return "dchg"
 
 
+def _range_to_mult(series: pl.Expr) -> pl.Expr:
+    """Generate multiplier from current range."""
+    a = series.abs()
+    return (
+        pl.when((series == 0) | (series < -2e9)).then(1e-1)
+        .when(series < 0).then(
+            pl.when(a < 10).then(1e-5)
+            .when(a < 100).then(1e-4)
+            .when(a < 1000).then(1e-3)
+            .when(a < 1000000).then(1e-2)
+            .when(a < 10000000).then(1e-8)
+            .when(a < 100000000).then(1e-7)
+            .otherwise(1e-6)
+        )
+        .otherwise(
+            pl.when(a < 10).then(1e-4)
+            .when(a < 100).then(1e-3)
+            .when(a < 1000).then(1e-2)
+            .otherwise(1e-1)
+        )
+    )  # fmt: skip
+
+
 class UnverifiedFormatWarning(UserWarning):
     """Raised when reading an nda_version which hasn't been tested against real data."""
