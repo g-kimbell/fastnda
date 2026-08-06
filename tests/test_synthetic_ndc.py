@@ -616,8 +616,13 @@ class TestNdcMain:
             assert col not in df.columns
 
     def test_main_15_dynamic(self) -> None:
-        """Declared StepTime/absTime/ccap/dcap/ceng/deng take priority over the fixed prefix."""
-        record_itemsize = 68
+        """Test ndax 15 with optional extra columns.
+
+        Step time and unix time should be added.
+        ccap/dcap, ceng/deng should take priority over fixed cap/eng.
+        pow should be ignored, and shouldn't affect other column reading.
+        """
+        record_itemsize = 72
         header = self._make_ndc15_header(
             record_itemsize,
             custom_items=[
@@ -625,11 +630,12 @@ class TestNdcMain:
                 (15, 6, 44),  # absTime, UInt32UInt32 (Time64)
                 (5, 8, 52),  # ccap, Float
                 (6, 8, 56),  # dcap, Float
-                (8, 8, 60),  # ceng, Float
-                (9, 8, 64),  # deng, Float
+                (11, 8, 60),  # pow, Float, ignored, shouldn't affect others columns
+                (8, 8, 64),  # ceng, Float
+                (9, 8, 68),  # deng, Float
             ],
         )
-        extra = struct.pack("<IIIIffff", 2, 500_000_000, 1_700_000_000, 250_000_000, 1800.0, 0.0, 3600.0, 0.0)
+        extra = struct.pack("<IIIIfffff", 2, 500_000_000, 1_700_000_000, 250_000_000, 1800.0, 0.0, 123.4, 3600.0, 0.0)
         record = self._make_ndc15_record(
             step_index=1,
             step_type_raw=1,  # BTS9 stChgCurr -> Common.StepType.cc_chg(1), charge
@@ -654,12 +660,12 @@ class TestNdcMain:
         _assert_col(df, "energy_mWh", [1.0])
 
     def test_main_15_unmapped(self) -> None:
-        """A EnumStepType with no ChangeStepType case (e.g. stLCCV=14) maps to undefine(0)."""
+        """A step type that is in bts8 but not bts9 should map to undefined (0) here."""
         record_itemsize = 36
         header = self._make_ndc15_header(record_itemsize, custom_items=[])
         record = self._make_ndc15_record(
             step_index=1,
-            step_type_raw=14,
+            step_type_raw=26,
             index=1,
             total_dws=0,
             total_dwns=0,

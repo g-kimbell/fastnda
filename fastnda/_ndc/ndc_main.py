@@ -4,8 +4,6 @@
 Do not use these methods directly, they may change any time without warning.
 """
 
-import warnings
-
 import numpy as np
 import polars as pl
 
@@ -429,8 +427,7 @@ def _ndc15_schema(buf: bytes) -> np.dtype:
     fields = _NDC15_PREFIX_FIELDS.copy()
     for axis_type, start_pos in axis_items.items():
         dynamic_fields = _NDC15_DYNAMIC_FIELDS.get(axis_type)
-        if dynamic_fields is None:
-            warnings.warn(f"Axis type {axis_type} in NDC15 schema not understood.", stacklevel=2)
+        if dynamic_fields is None:  # could be power (11), ignore, trivial to calculate
             continue
         pos = start_pos
         for name, fmt in dynamic_fields:
