@@ -90,8 +90,8 @@ _NDC_READERS: dict[tuple[int, int], Callable[[bytes], pl.DataFrame] | None] = {
     (14, 5): ndc_aux.read_ndc_aux_6,
     (14, 7): ndc_step.read_ndc_step_6,
     (14, 18): ndc_runinfo.read_ndc_runinfo_14,
-    # ndax 15 - BTS9.x, needs more investigation
-    (15, 1): None,
+    # ndax 15 - BTS9, per-file-configurable columns
+    (15, 1): ndc_main.read_ndc_main_15,
     # ndax 16
     (16, 1): ndc_main.read_ndc_main_16,
     (16, 5): ndc_aux.read_ndc_aux_16,
