@@ -84,7 +84,7 @@ DTYPE_MAP: Mapping[str, type[pl.DataType]] = MappingProxyType(
 # Not used any more, utils._range_to_mult() is used instead, left for backwards compatibility
 MULTIPLIER_MAP = MappingProxyType(
     {
-        -100000000: 1e1,
+        -100000000: 1e1,  # 1e-6 in _range_to_mult
         -200000: 1e-2,
         -100000: 1e-2,
         -60000: 1e-2,
@@ -108,7 +108,7 @@ MULTIPLIER_MAP = MappingProxyType(
         -5: 1e-5,
         -2: 1e-5,
         -1: 1e-5,
-        0: 0.0,
+        0: 0.0,  # 1e-1 in _range_to_mult
         1: 1e-4,
         2: 1e-4,
         5: 1e-4,
