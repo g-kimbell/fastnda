@@ -9,15 +9,19 @@ import polars as pl
 # Neware step type integer to string codes
 STEP_TYPE_MAP = MappingProxyType(
     {
+        0: "Undefined",
         1: "CC_Chg",
         2: "CC_DChg",
         3: "CV_Chg",
         4: "Rest",
         5: "Cycle",
+        6: "End",
         7: "CCCV_Chg",
         8: "CP_DChg",
         9: "CP_Chg",
         10: "CR_DChg",
+        11: "CR_Chg",
+        12: "IR",
         13: "Pause",
         16: "Pulse",
         17: "SIM",
@@ -26,9 +30,14 @@ STEP_TYPE_MAP = MappingProxyType(
         20: "CCCV_DChg",
         21: "Control",
         22: "OCV",
+        23: "SubStep",
+        24: "Follow",
         25: "Ramp",
         26: "CPCV_DChg",
         27: "CPCV_Chg",
+        28: "CRCV_DChg",
+        29: "CRCV_Chg",
+        30: "CyclicVoltammetry",
     }
 )
 
@@ -42,11 +51,14 @@ CHARGE_DISCHARGE_MAP = MappingProxyType(
         8: 0,
         9: 1,
         10: 0,
+        11: 1,
         18: 1,
         19: 0,
         20: 0,
         26: 0,
         27: 1,
+        28: 0,
+        29: 1,
     }
 )
 
