@@ -513,6 +513,167 @@ class TestNdcMain:
         _assert_col(df, "voltage_V", [3.6, 3.5])
         _assert_col(df, "current_mA", [200.0, -150.0])
 
+    @staticmethod
+    def _make_ndc15_header(record_itemsize: int, custom_items: list[tuple[int, int, int]]) -> bytes:
+        header = bytearray(4096)
+        header[0] = 1  # filetype
+        header[2] = 15  # version
+        header[516:520] = struct.pack("<I", record_itemsize)
+        offset = 520
+        for axis_type, value_type, pos in custom_items:
+            header[offset : offset + 9] = struct.pack("<iBi", axis_type, value_type, pos)
+            offset += 9
+        return bytes(header)
+
+    @staticmethod
+    def _make_ndc15_record(
+        *,
+        step_index: int,
+        step_type_raw: int,
+        index: int,
+        total_dws: int,
+        total_dwns: int,
+        curr: float,
+        volt: float,
+        fixed_cap: float,
+        fixed_eng: float,
+        extra: bytes = b"",
+    ) -> bytes:
+        prefix = struct.pack(
+            "<BBBBIIIIffff",
+            0,  # btDataFlag
+            0,  # btReserved
+            step_index,
+            step_type_raw,
+            0,  # dwTestID
+            index,
+            total_dws,
+            total_dwns,
+            curr,
+            volt,
+            fixed_cap,
+            fixed_eng,
+        )
+        return prefix + extra
+
+    @staticmethod
+    def _make_ndc15_block(records: list[bytes], record_itemsize: int) -> bytes:
+        block = bytearray(4096)
+        rows_per_record = (4096 - 132 - 1) // record_itemsize
+        mask = np.zeros(rows_per_record, dtype=np.uint8)
+        mask[: len(records)] = 1
+        packed = np.packbits(mask, bitorder="little").tobytes()
+        block[4 : 4 + len(packed)] = packed
+        offset = 132
+        for rec in records:
+            assert len(rec) == record_itemsize
+            block[offset : offset + len(rec)] = rec
+            offset += record_itemsize
+        return bytes(block)
+
+    def test_main_15_fixed(self) -> None:
+        """No dynamic fields declared: capacity/energy come from the fixed prefix, gated by step type."""
+        record_itemsize = 36
+        header = self._make_ndc15_header(record_itemsize, custom_items=[])
+        records = [
+            self._make_ndc15_record(
+                step_index=1,
+                step_type_raw=21,  # BTS9 stChgPowerVolt -> Common.StepType.cpcv_chg(27), charge
+                index=10,
+                total_dws=5,
+                total_dwns=500_000_000,
+                curr=123.45,
+                volt=3.6,
+                fixed_cap=1800.0,
+                fixed_eng=3600.0,
+            ),
+            self._make_ndc15_record(
+                step_index=2,
+                step_type_raw=22,  # BTS9 stDChgPowerVolt -> Common.StepType.cpcv_dchg(26), discharge
+                index=11,
+                total_dws=10,
+                total_dwns=0,
+                curr=-67.89,
+                volt=3.5,
+                fixed_cap=900.0,
+                fixed_eng=1800.0,
+            ),
+        ]
+        buf = header + self._make_ndc15_block(records, record_itemsize)
+
+        df = ndc_main.read_ndc_main_15(buf)
+
+        _assert_col(df, "index", [10, 11])
+        _assert_col(df, "step_index", [1, 2])
+        _assert_col(df, "step_type", [27, 26])
+        _assert_col(df, "total_time_s", [5.5, 10.0])
+        _assert_col(df, "current_mA", [123.45, -67.89])
+        _assert_col(df, "voltage_V", [3.6, 3.5])
+        _assert_col(df, "capacity_mAh", [0.5, -0.25])
+        _assert_col(df, "energy_mWh", [1.0, -0.5])
+        _assert_col(df, "step_count", [1, 2])
+        for col in ("step_time_s", "unix_time_s"):
+            assert col not in df.columns
+
+    def test_main_15_dynamic(self) -> None:
+        """Declared StepTime/absTime/ccap/dcap/ceng/deng take priority over the fixed prefix."""
+        record_itemsize = 68
+        header = self._make_ndc15_header(
+            record_itemsize,
+            custom_items=[
+                (65, 6, 36),  # StepTime, UInt32UInt32 (Time64)
+                (15, 6, 44),  # absTime, UInt32UInt32 (Time64)
+                (5, 8, 52),  # ccap, Float
+                (6, 8, 56),  # dcap, Float
+                (8, 8, 60),  # ceng, Float
+                (9, 8, 64),  # deng, Float
+            ],
+        )
+        extra = struct.pack("<IIIIffff", 2, 500_000_000, 1_700_000_000, 250_000_000, 1800.0, 0.0, 3600.0, 0.0)
+        record = self._make_ndc15_record(
+            step_index=1,
+            step_type_raw=1,  # BTS9 stChgCurr -> Common.StepType.cc_chg(1), charge
+            index=100,
+            total_dws=5,
+            total_dwns=0,
+            curr=100.0,
+            volt=3.7,
+            fixed_cap=0.0,
+            fixed_eng=0.0,
+            extra=extra,
+        )
+        buf = header + self._make_ndc15_block([record], record_itemsize)
+
+        df = ndc_main.read_ndc_main_15(buf)
+
+        _assert_col(df, "index", [100])
+        _assert_col(df, "total_time_s", [5.0])
+        _assert_col(df, "step_time_s", [2.5])
+        _assert_col(df, "unix_time_s", [1_700_000_000.25])
+        _assert_col(df, "capacity_mAh", [0.5])
+        _assert_col(df, "energy_mWh", [1.0])
+
+    def test_main_15_unmapped(self) -> None:
+        """A EnumStepType with no ChangeStepType case (e.g. stLCCV=14) maps to undefine(0)."""
+        record_itemsize = 36
+        header = self._make_ndc15_header(record_itemsize, custom_items=[])
+        record = self._make_ndc15_record(
+            step_index=1,
+            step_type_raw=14,
+            index=1,
+            total_dws=0,
+            total_dwns=0,
+            curr=0.0,
+            volt=0.0,
+            fixed_cap=0.0,
+            fixed_eng=0.0,
+        )
+        buf = header + self._make_ndc15_block([record], record_itemsize)
+
+        df = ndc_main.read_ndc_main_15(buf)
+
+        _assert_col(df, "step_type", [0])
+
     def test_main_16(self) -> None:
         """Main for ndax 16."""
         layout = [

@@ -4,6 +4,8 @@
 Do not use these methods directly, they may change any time without warning.
 """
 
+import warnings
+
 import numpy as np
 import polars as pl
 
@@ -354,3 +356,157 @@ def read_ndc_main_16(buf: bytes) -> pl.DataFrame:
             pl.col("current_mA"),
         ]
     )
+
+
+# ndax 15 - fixed 36-byte record prefix + customisable columns after
+# Fixed columns
+_NDC15_PREFIX_FIELDS: list[tuple[str, str, int]] = [
+    ("step_index", "<u1", 2),
+    ("step_type_raw", "<u1", 3),  # different to STEP_TYPE_MAP, needs remapping
+    ("index", "<u4", 8),
+    ("total_time_s", "<u4", 12),
+    ("total_time_ns", "<u4", 16),
+    ("current_mA", "<f4", 20),
+    ("voltage_V", "<f4", 24),
+    ("fixed_cap_mAs", "<f4", 28),  # ignored if dynamic ccap/dcap are present
+    ("fixed_eng_mWs", "<f4", 32),  # ignored if dynamic ccap/dcap are present
+]
+
+# Customisable columns
+_NDC15_CUSTOM_ITEM_DTYPE = np.dtype([("axis_type", "<i4"), ("value_type", "u1"), ("pos", "<i4")])
+# axis_type -> sub-fields
+_NDC15_DYNAMIC_FIELDS: dict[int, list[tuple[str, str]]] = {
+    15: [("unix_time_s", "<u4"), ("unix_time_ns", "<u4")],
+    65: [("step_time_s", "<u4"), ("step_time_ns", "<u4")],
+    5: [("dyn_ccap_mAs", "<f4")],
+    6: [("dyn_dcap_mAs", "<f4")],
+    8: [("dyn_ceng_mWs", "<f4")],
+    9: [("dyn_deng_mWs", "<f4")],
+}
+
+# BTS9 step types to BTS8/fastnda step types defined in dicts.py
+_NDC15_STEP_TYPE_MAP: dict[int, int] = {
+    0: 0,
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
+    5: 5,
+    6: 6,
+    7: 7,
+    8: 8,
+    9: 9,
+    10: 10,
+    11: 11,
+    12: 12,
+    13: 13,
+    16: 16,
+    17: 17,
+    18: 18,
+    19: 19,
+    20: 20,
+    21: 27,
+    22: 26,
+}
+
+
+def _ndc15_custom_axis_items(buf: bytes) -> dict[int, int]:
+    """Parse the custom column definition into {col_type: byte_position}."""
+    items = np.frombuffer(buf, dtype=_NDC15_CUSTOM_ITEM_DTYPE, count=300, offset=520)
+    # terminated at the first all-zero entry, or unterminated if all 300 slots are populated
+    terminators = np.flatnonzero((items["axis_type"] == 0) & (items["value_type"] == 0))
+    end = terminators[0] if terminators.size else len(items)
+    return dict(zip(items["axis_type"][:end].tolist(), items["pos"][:end].tolist(), strict=True))
+
+
+def _ndc15_schema(buf: bytes) -> np.dtype:
+    """Build a numpy dtype for main: fixed + custom columns."""
+    # Total size in bytes of one row
+    itemsize = int(np.frombuffer(buf, dtype="<u4", count=1, offset=516)[0])
+    # Get custom columns
+    axis_items = _ndc15_custom_axis_items(buf)
+    # Copy fixed columns and extend with custom column details
+    fields = _NDC15_PREFIX_FIELDS.copy()
+    for axis_type, start_pos in axis_items.items():
+        dynamic_fields = _NDC15_DYNAMIC_FIELDS.get(axis_type)
+        if dynamic_fields is None:
+            warnings.warn(f"Axis type {axis_type} in NDC15 schema not understood.", stacklevel=2)
+            continue
+        pos = start_pos
+        for name, fmt in dynamic_fields:
+            fields.append((name, fmt, pos))
+            pos += np.dtype(fmt).itemsize
+    names, formats, offsets = zip(*fields, strict=True)
+    return np.dtype({"names": list(names), "formats": list(formats), "offsets": list(offsets), "itemsize": itemsize})
+
+
+def read_ndc_main_15(buf: bytes) -> pl.DataFrame:
+    """Read ndc version 15 filetype 1. See _ndc15_schema for the per-file record layout."""
+    dtype = _ndc15_schema(buf)
+    df = bytes_to_df(buf, dtype, add_index="index" not in dtype.names)
+
+    # Build exprs for with_columns, map step_type, calc total_time and step_count
+    exprs = [
+        pl.col("step_type_raw")
+        .replace_strict(_NDC15_STEP_TYPE_MAP, default=0, return_dtype=pl.UInt8)
+        .alias("step_type"),
+        (pl.col("total_time_s") + pl.col("total_time_ns") * 1e-9).alias("total_time_s"),
+        _count_changes(pl.col("step_index")).alias("step_count"),
+    ]
+
+    # If extra time columns are present, calculate
+    if "step_time_s" in df.columns:
+        exprs.append((pl.col("step_time_s") + pl.col("step_time_ns") * 1e-9).alias("step_time_s"))
+    if "unix_time_s" in df.columns:
+        exprs.append((pl.col("unix_time_s") + pl.col("unix_time_ns") * 1e-9).alias("unix_time_s"))
+
+    # If capacity and energy are split into two cols, combine
+    if "dyn_ccap_mAs" in df.columns and "dyn_dcap_mAs" in df.columns:
+        exprs.append((pl.col("dyn_ccap_mAs") + pl.col("dyn_dcap_mAs")).alias("fixed_cap_mAs"))
+    if "dyn_ceng_mWs" in df.columns and "dyn_deng_mWs" in df.columns:
+        exprs.append((pl.col("dyn_ceng_mWs") + pl.col("dyn_deng_mWs")).alias("fixed_eng_mWs"))
+
+    # Run expressions, we need rescale "fixed_x_y" in the next step
+    df = df.with_columns(exprs)
+    exprs = []
+
+    # Raw step type scaling
+    _NDC15_POS = {1, 3, 7, 9, 11, 16, 17, 18, 21}
+    _NDC15_NEG = {2, 8, 10, 19, 20, 22}
+    _NDC15_SIM = 17
+
+    # Don't abs on SIM
+    is_absed = pl.col("step_type_raw").ne(_NDC15_SIM)
+    # Multiply by 1/3600 for charge/SIM or -1/3600 for discharge
+    mult = (
+        pl.when(pl.col("step_type_raw").is_in(_NDC15_POS))
+        .then(1 / 3600)
+        .otherwise(pl.when(pl.col("step_type_raw").is_in(_NDC15_NEG)).then(-1 / 3600).otherwise(0.0))
+    )
+
+    exprs.append(
+        (pl.when(is_absed).then(pl.col("fixed_cap_mAs").abs()).otherwise(pl.col("fixed_cap_mAs")) * mult).alias(
+            "capacity_mAh"
+        )
+    )
+    exprs.append(
+        (pl.when(is_absed).then(pl.col("fixed_eng_mWs").abs()).otherwise(pl.col("fixed_eng_mWs")) * mult).alias(
+            "energy_mWh"
+        )
+    )
+
+    df = df.with_columns(exprs)
+
+    drop_cols = [
+        "step_type_raw",
+        "fixed_cap_mAs",
+        "fixed_eng_mWs",
+        "dyn_ccap_mAs",
+        "dyn_dcap_mAs",
+        "dyn_ceng_mWs",
+        "dyn_deng_mWs",
+        "unix_time_ns",
+        "total_time_ns",
+        "step_time_ns",
+    ]
+    return df.drop([c for c in drop_cols if c in df.columns])
