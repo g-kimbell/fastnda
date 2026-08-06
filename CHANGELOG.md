@@ -4,15 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.0rc2] - 2026-08-06
+## [1.3.0] - 2026-08-06
 ### Added
 - Support for all known .ndax (10 new file versions)
 - Support for all known .nda (25 new file versions)
 - Improved .nda metadata reading
 - `batch-convert-metadata` CLI command
 - `--version` CLI flag
-- Better step type support
-- Better current range support
+- Support for more step types
+- Support for more current ranges
 
 ### Changed
 - Performance improvements
