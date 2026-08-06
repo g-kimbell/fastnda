@@ -77,14 +77,15 @@ jobs:
             exit 1
           fi
 
-      - name: Install flit
-        run: pip install flit~=3.12
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
 
-      - name: Publish to PyPI
-        run: flit publish
+      - name: Build and publish to PyPI
+        run: |
+          uv build --no-sources
+          uv publish
         env:
-          FLIT_USERNAME: __token__
-          FLIT_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
