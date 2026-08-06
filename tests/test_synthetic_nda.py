@@ -546,7 +546,7 @@ class TestReadNda11:
         ("range", "<i4"),
         ("_pad2", "V4"),
     ]
-    # range=100 -> multiplier 1e-2 (see fastnda.dicts.MULTIPLIER_MAP)
+    # range=100 -> multiplier 1e-2
     DEFAULTS: ClassVar[dict[str, int]] = {"identifier": 85, "cycle_count": 0, "range": 100}
 
     def test_decodes_expected_values(self) -> None:

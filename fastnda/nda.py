@@ -12,8 +12,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from fastnda.dicts import MULTIPLIER_MAP
-from fastnda.utils import UnverifiedFormatWarning, _count_changes
+from fastnda.utils import UnverifiedFormatWarning, _count_changes, _range_to_mult
 
 logger = logging.getLogger(__name__)
 
@@ -704,7 +703,7 @@ def _read_nda_11(mm: mmap.mmap) -> pl.DataFrame:
                 pl.col("cycle_count") + 1,
                 pl.col("step_time_s").cast(pl.Float32) / 1000,
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
-                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
+                _range_to_mult(pl.col("range")).alias("multiplier"),
                 _count_changes(pl.col("step_index")).alias("step_count"),
             ]
         )
@@ -756,7 +755,7 @@ def _read_nda_14(mm: mmap.mmap) -> pl.DataFrame:
                 pl.col("cycle_count") + 1,
                 pl.col("step_time_s").cast(pl.Float32) / 1000,
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
-                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
+                _range_to_mult(pl.col("range")).alias("multiplier"),
                 _count_changes(pl.col("step_index")).alias("step_count"),
             ]
         )
@@ -842,7 +841,7 @@ def _read_nda_25(mm: mmap.mmap) -> pl.DataFrame:
                 pl.col("cycle_count") + 1,
                 pl.col("step_time_s").cast(pl.Float32) / 1000,
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
-                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
+                _range_to_mult(pl.col("range")).alias("multiplier"),
                 _count_changes(pl.col("step_index")).alias("step_count"),
             ]
         )
@@ -900,7 +899,7 @@ def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
                 pl.col("cycle_count") + 1,
                 pl.col("step_time_s").cast(pl.Float32) / 1000,
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
-                pl.col("range").replace_strict(MULTIPLIER_MAP, return_dtype=pl.Float64).alias("multiplier"),
+                _range_to_mult(pl.col("range")).alias("multiplier"),
                 pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
                     "timestamp"
                 ),
