@@ -10,10 +10,10 @@
 [![Checks](https://img.shields.io/github/actions/workflow/status/empaeconversion/fastnda/test.yml)](https://github.com/empaeconversion/fastnda/actions/workflows/test.yml)
 [![Coverage](https://img.shields.io/codecov/c/github/empaeconversion/fastnda)](https://app.codecov.io/gh/empaeconversion/fastnda)
 
-Python and command-line tool to read Neware .nda and .ndax files fast.
+Python and command-line tool to read NEWARE .nda and .ndax files fast.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/0ac3e5dd-1905-4c4b-937e-4e4663c866d9" width="500" align="center">
+  <img src="https://github.com/user-attachments/assets/02b8c7c1-13bf-4233-ad2a-7e5a667c3614" width="500" align="center">
 </p>
 <p align="center">
   Time to convert a ~100 MB, 1.3-million-row .ndax file to .csv. Best of three runs.<br>1) Cold start from command-line interface, including module imports.<br>2) Processing time only, without UI navigation.
@@ -80,22 +80,22 @@ Usually this is due to a hardware setting or a file type we have not seen before
 
 ## Notes
 
-This package adheres closely to the outputs from Neware's BTSDA, but there are some differences:
-  - In Neware, capacity (and energy) is split into charge and discharge columns, and resets every step
+This package adheres closely to the outputs from NEWARE's BTSDA, but there are some differences:
+  - In NEWARE, capacity (and energy) is split into charge and discharge columns, and resets every step
   - `fastnda` records the *net* capacity (and energy), resetting every step
-  - A negative current during charge will count negatively to the capacity, in Neware it is ignored
-  - In some Neware files, cycles are only counted when the step index goes backwards
+  - A negative current during charge will count negatively to the capacity, in NEWARE it is ignored
+  - In some NEWARE files, cycles are only counted when the step index goes backwards
   - Here, a cycle is when a charge -> discharge has been completed
   - Change this behaviour with `cycle_mode = x` or `--cycle-mode=x`, where `x` is `'chg' | 'dchg' | 'auto' | 'raw'`
-  - Neware sometimes uses "DChg" and sometimes "Dchg" for discharge, here it is always "DChg"
-  - Neware "Pulse Step" is here "Pulse"
+  - NEWARE sometimes uses "DChg" and sometimes "Dchg" for discharge, here it is always "DChg"
+  - NEWARE "Pulse Step" is here "Pulse"
 
 Differences compared to `NewareNDA`
   - `fastnda` returns `polars` dataframes with different column names
   - There is only one capacity and one energy column
   - Time is explicitly split into step time and total time
 
-Other benefits of using `fastnda` or `NewareNDA` over Neware's BTSDA:
+Other benefits of using `fastnda` or `NewareNDA` over NEWARE's BTSDA:
   - Batch or automated file conversion is straightforward with Python or CLI
   - BTSDA drops precision depending on the units you select, e.g. exporting to V is less precise than exporting to mV
   - BTSDA can drop precision over time, e.g. after 1e6 seconds, all millisecond precision can be dropped
