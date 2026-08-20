@@ -513,43 +513,36 @@ def _read_nda_1(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_2(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 2 (deprecated by Neware - unreachable in BTSDA)."""
-    header_idx, data_len = _nda_head_main(mm)
-    arr = _get_arr_from_nda(mm, header=header_idx, record_len=57, data_len=data_len)
+    header_idx, data_len = _nda_head_main(mm, pos_offset=64)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=39, data_len=data_len)
     dtype = np.dtype(
         [
             ("identifier", "<u1"),
-            ("index", "<u4"),
+            ("_pad2", "V4"),  # Unknown
             ("cycle_count", "<u4"),
-            ("step_index", "<u1"),
             ("step_type", "<u1"),
+            ("step_index", "<u1"),
             ("step_time_s", "<u4"),
             ("voltage_V", "<i4"),
             ("current_mA", "<i4"),
-            ("_pad1", "V8"),  # nIR, iTemp
+            ("_pad3", "V8"),  # Unknown
             ("capacity_mAh", "<i8"),
-            ("_pad2", "V1"),  # bEng flag
-            ("energy_mWh", "<i8"),
-            ("_pad3", "V1"),  # bLocalTime flag
-            ("unix_time_s", "<u8"),
         ]
     )
     multiplier = _nda_multiplier(mm)
     return (
         _view_arr(arr, dtype)
-        .filter(pl.col("identifier").is_in([0, 85]))
+        .filter(pl.col("identifier") == 0)
         .drop("identifier")
         .with_columns(
             [
-                pl.col("cycle_count") + 1,
+                pl.int_range(1, pl.len() + 1).alias("index"),
                 pl.col("step_time_s").cast(pl.Float32),
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
                 pl.col("current_mA") * multiplier,
-                (
-                    pl.col(["capacity_mAh", "energy_mWh"]).cast(pl.Float64)
-                    * multiplier
-                    * pl.col("current_mA").sign()
-                    / 3600
-                ).cast(pl.Float32),
+                (pl.col("capacity_mAh").cast(pl.Float64) * multiplier * pl.col("current_mA").sign() / 3600).cast(
+                    pl.Float32
+                ),
                 _count_changes(pl.col("step_index")).alias("step_count"),
             ]
         )

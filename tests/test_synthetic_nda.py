@@ -317,25 +317,25 @@ class TestReadNda1:
 
 
 class TestReadNda2:
-    """NDA file version 2."""
+    """NDA file version 2.
+
+    Unlike every other version, nda2 has no on-disk index field - `index` is
+    synthesized from row order after dropping identifier-255 marker records.
+    """
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
-        ("index", "<u4"),
+        ("_pad2", "V4"),  # Unknown
         ("cycle_count", "<u4"),
-        ("step_index", "<u1"),
         ("step_type", "<u1"),
+        ("step_index", "<u1"),
         ("step_time_s", "<u4"),
         ("voltage_V", "<i4"),
         ("current_mA", "<i4"),
-        ("_pad1", "V8"),
+        ("_pad3", "V8"),  # Unknown
         ("capacity_mAh", "<i8"),
-        ("_pad2", "V1"),
-        ("energy_mWh", "<i8"),
-        ("_pad3", "V1"),
-        ("unix_time_s", "<u8"),
     ]
-    DEFAULTS: ClassVar[dict[str, int]] = {"cycle_count": 0}
+    DEFAULTS: ClassVar[dict[str, int]] = {"cycle_count": 1}
 
     def test_decodes_expected_values(self) -> None:
         """Pack synthetic records and check every decoded column against hand-computed values."""
@@ -343,16 +343,15 @@ class TestReadNda2:
             self.LAYOUT,
             self.DEFAULTS,
             columns={
-                "identifier": [85, 0],  # exercise the "0 or 85" mask
-                "index": [1, 2],
-                "step_index": [1, 2],
-                "step_type": [1, 2],
-                "step_time_s": [10, 20],
-                "voltage_V": [36000, 35000],
-                "current_mA": [200000, -150000],
-                "capacity_mAh": [1800000, 900000],
-                "energy_mWh": [3600000, 1800000],
-                "unix_time_s": [1700000000, 1700000010],
+                # Leading marker record (identifier=255) - filtered out, and given
+                # values that would fail the assertions below if it leaked through.
+                "identifier": [255, 0, 0],
+                "step_index": [9, 1, 2],
+                "step_type": [9, 1, 2],
+                "step_time_s": [99999, 10, 20],
+                "voltage_V": [-99999999, 36000, 35000],
+                "current_mA": [99999999, 200000, -150000],
+                "capacity_mAh": [99999999, 1800000, 900000],
             },
         )
         header = _nda_1_29_header(main_begin=114, current_range=10)
@@ -361,13 +360,10 @@ class TestReadNda2:
         df = nda._read_nda_2(mm)
 
         _assert_col(df, "index", [1, 2])
-        _assert_col(df, "cycle_count", [1, 1])
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "voltage_V", [3.6, 3.5])
         _assert_col(df, "current_mA", [200.0, -150.0])
         _assert_col(df, "capacity_mAh", [0.5, -0.25])
-        _assert_col(df, "energy_mWh", [1.0, -0.5])
-        _assert_col(df, "unix_time_s", [1700000000, 1700000010])
         _assert_col(df, "step_count", [1, 2])
 
 
