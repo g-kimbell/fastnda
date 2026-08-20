@@ -260,7 +260,8 @@ class TestReadNda1:
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "step_index", [1, 2])
-        _assert_col(df, "step_type", [1, 4])
+        # Raw step_type 4 remapped to 2 (CC_DChg) - nda1 uses a legacy step type enum
+        _assert_col(df, "step_type", [1, 2])
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "voltage_V", [3.6, 3.5])
         # current_range 6000 gives a 0.1 mA multiplier

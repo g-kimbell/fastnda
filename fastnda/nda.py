@@ -487,6 +487,10 @@ def _read_nda_1(mm: mmap.mmap) -> pl.DataFrame:
             ("capacity_mAh", "<i8"),
         ]
     )
+    # nda1 uses a legacy step type enum
+    # Remap to the standard codes used by STEP_TYPE_MAP
+    # The remap is incomplete, needs more test data
+    step_remap = {2: 3, 4: 2, 5: 4}
     multiplier = _nda_multiplier(mm)
     return (
         _view_arr(arr, dtype)
@@ -499,6 +503,7 @@ def _read_nda_1(mm: mmap.mmap) -> pl.DataFrame:
                 (pl.col("capacity_mAh").cast(pl.Float64) * multiplier * pl.col("current_mA").sign() / 3600).cast(
                     pl.Float32
                 ),
+                pl.col("step_type").replace(step_remap),
                 _count_changes(pl.col("step_index")).alias("step_count"),
                 _count_changes(pl.col("cycle_count")),
             ]
