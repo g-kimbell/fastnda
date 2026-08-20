@@ -137,11 +137,12 @@ def read_metadata(file: str | Path) -> dict[str, str | float]:
 
     """
     file = Path(file)
-    if file.suffix == ".nda":
+    suffix = file.suffix.lower()
+    if suffix == ".nda":
         from fastnda.nda import read_nda_metadata
 
         return read_nda_metadata(file)
-    if file.suffix == ".ndax":
+    if suffix == ".ndax":
         from fastnda.ndax import read_ndax_metadata
 
         return read_ndax_metadata(file)
