@@ -384,10 +384,12 @@ def _get_arr_from_nda(
     mm: mmap.mmap,
     header: bytes | int,
     record_len: int,
+    data_len: int = 0,
 ) -> np.ndarray:
-    """Read an nda file."""
+    """Read records from an nda file, stopping after data_len bytes if it is non-zero."""
     header_idx = _find_header(mm, header)
-    num_records = (len(mm) - header_idx) // record_len
+    available = min(data_len, len(mm) - header_idx) if data_len else len(mm) - header_idx
+    num_records = available // record_len
     return np.frombuffer(mm, dtype=np.uint8, count=num_records * record_len, offset=header_idx).reshape(
         (num_records, record_len)
     )
@@ -413,15 +415,12 @@ def _mask_arr(
     return _view_arr(arr, dtype).filter(pl.col("identifier") == mask).drop("identifier")
 
 
-def _nda_head_main_begin(mm: mmap.mmap, *, pos_offset: int = 32, pos64: bool = False) -> int:
-    """Read the data start offset from the header.
-
-    File versions 1-11, 25, 27, store nBegin, nLen at a fixed offset.
-    File versions 12-29 except 25,27 use a different fixed offset.
-    File versions 129-130 use 64-bit pairs instead.
-    """
+def _nda_head_main(mm: mmap.mmap, *, pos_offset: int = 64, pos64: bool = False) -> tuple[int, int]:
+    """Read the {begin, length} pointer to the main data block from the header."""
     size = 8 if pos64 else 4
-    return int.from_bytes(mm[pos_offset : pos_offset + size], "little")
+    begin = int.from_bytes(mm[pos_offset : pos_offset + size], "little")
+    length = int.from_bytes(mm[pos_offset + size : pos_offset + 2 * size], "little")
+    return begin, length
 
 
 def _merge_aux(
@@ -462,8 +461,8 @@ def _read_nda(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_1(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 1."""
-    header_idx = _nda_head_main_begin(mm)
-    arr = _get_arr_from_nda(mm, header=header_idx, record_len=38)
+    header_idx, data_len = _nda_head_main(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=38, data_len=data_len)
     dtype = np.dtype(
         [
             ("index", "<u4"),
@@ -495,8 +494,8 @@ def _read_nda_1(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_2(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 2 (deprecated by Neware - unreachable in BTSDA)."""
-    header_idx = _nda_head_main_begin(mm)
-    arr = _get_arr_from_nda(mm, header=header_idx, record_len=57)
+    header_idx, data_len = _nda_head_main(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=57, data_len=data_len)
     dtype = np.dtype(
         [
             ("identifier", "<u1"),
@@ -535,8 +534,8 @@ def _read_nda_2(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_3(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 3 (file version 3, 4)."""
-    header_idx = _nda_head_main_begin(mm)
-    arr = _get_arr_from_nda(mm, header=header_idx, record_len=43)
+    header_idx, data_len = _nda_head_main(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=43, data_len=data_len)
     dtype = np.dtype(
         [
             ("identifier", "<u1"),
@@ -604,8 +603,8 @@ def _read_nda_5(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_9(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 9."""
-    header_idx = _nda_head_main_begin(mm)
-    arr = _get_arr_from_nda(mm, header=header_idx, record_len=60)
+    header_idx, data_len = _nda_head_main(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=60, data_len=data_len)
     dtype = np.dtype(
         [
             ("identifier", "<u1"),
@@ -639,8 +638,8 @@ def _read_nda_9(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_10(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 10."""
-    header_idx = _nda_head_main_begin(mm)
-    arr = _get_arr_from_nda(mm, header=header_idx, record_len=64)
+    header_idx, data_len = _nda_head_main(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=64, data_len=data_len)
     dtype = np.dtype(
         [
             ("identifier", "<u1"),
@@ -674,9 +673,8 @@ def _read_nda_10(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_11(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda struct 11 (file versions 11, 12, 13, 15, 18)."""
-    pos_offset = 32 if int(mm[14]) == 11 else 64
-    header_idx = _nda_head_main_begin(mm, pos_offset=pos_offset)
-    arr = _get_arr_from_nda(mm, header=header_idx, record_len=69)
+    header_idx, data_len = _nda_head_main(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=69, data_len=data_len)
     dtype = np.dtype(
         [
             ("identifier", "<u1"),
@@ -771,7 +769,7 @@ def _read_nda_14(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_19(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 19."""
-    header_idx = _nda_head_main_begin(mm, pos_offset=64)
+    header_idx, _data_len = _nda_head_main(mm)
     arr = _get_arr_from_nda(mm, header=header_idx, record_len=68)
     dtype = np.dtype(
         [
@@ -812,8 +810,8 @@ def _read_nda_19(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_25(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 25 (file versions 25, 27)."""
-    header_idx = _nda_head_main_begin(mm)
-    arr = _get_arr_from_nda(mm, header=header_idx, record_len=70)
+    header_idx, data_len = _nda_head_main(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=70, data_len=data_len)
     dtype = np.dtype(
         [
             ("identifier", "<u1"),
@@ -939,7 +937,7 @@ def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_129(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 129 (deprecated by Neware)."""
-    header_idx = _nda_head_main_begin(mm, pos_offset=82, pos64=True)
+    header_idx, _data_len = _nda_head_main(mm, pos_offset=82, pos64=True)
     arr = _get_arr_from_nda(mm, header=header_idx, record_len=88)
     dtype = np.dtype(
         [
