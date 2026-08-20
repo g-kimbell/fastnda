@@ -84,15 +84,15 @@ def read(
         )
 
     # Round time to us, step_type -> categories, merge charge/discharge capacity/energy
-    cols = [
-        pl.col("step_time_s").round(6),
-        pl.col("total_time_s").round(6),
-        pl.col("unix_time_s").round(6),
-    ]
+    cols = []
+    if "step_time_s" in df.columns:
+        cols.append(pl.col("step_time_s").round(6))
+    if "total_time_s" in df.columns:
+        cols.append(pl.col("total_time_s").round(6))
+    if "unix_time_s" in df.columns:
+        cols.append(pl.col("unix_time_s").round(6))
     if not raw_categories:
-        cols += [
-            pl.col("step_type").replace_strict(STEP_TYPE_MAP, default=None, return_dtype=pl.Categorical),
-        ]
+        cols.append(pl.col("step_type").replace_strict(STEP_TYPE_MAP, default=None, return_dtype=pl.Categorical))
     if "capacity_mAh" not in df.columns:
         cols += [
             (pl.col("charge_capacity_mAh") - pl.col("discharge_capacity_mAh")).alias("capacity_mAh"),
