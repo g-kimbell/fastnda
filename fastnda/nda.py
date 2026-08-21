@@ -902,7 +902,7 @@ def _read_nda_25(mm: mmap.mmap) -> pl.DataFrame:
         _mask_arr(arr, dtype, 85)
         .with_columns(
             [
-                pl.col("cycle_count") + 1,
+                _count_changes(pl.col("cycle_count")),
                 pl.col("step_time_s").cast(pl.Float32) / 1000,
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
                 _count_changes(pl.col("step_index")).alias("step_count"),
