@@ -94,5 +94,14 @@ def _range_to_mult(series: pl.Expr) -> pl.Expr:
     )  # fmt: skip
 
 
+def _drop_empty(df: pl.DataFrame, cols: list[str] | None) -> pl.DataFrame:
+    """Drop empty columns."""
+    # Drop empty columns
+    if cols is None:
+        cols = df.columns
+    cols_to_drop = [c for c in cols if df.filter(pl.col(c) != 0).is_empty()]
+    return df.select(pl.exclude(cols_to_drop))
+
+
 class UnverifiedFormatWarning(UserWarning):
     """Raised when reading an nda_version which hasn't been tested against real data."""
