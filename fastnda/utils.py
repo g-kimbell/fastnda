@@ -57,6 +57,14 @@ def _generate_cycle_number(
     )
 
 
+def _step_sign(step_type: pl.Expr, current_col: pl.Expr) -> pl.Expr:
+    """Sign of capacity/energy from step type.
+
+    Falls back to the current sign for step types not in CHARGE_DISCHARGE_MAP.
+    """
+    return (step_type.replace_strict(CHARGE_DISCHARGE_MAP, default=None) * 2 - 1).fill_null(current_col.sign())
+
+
 def _count_changes(series: pl.Expr) -> pl.Expr:
     """Enumerate the number of value changes in a series."""
     return series.diff().fill_null(1).abs().gt(0).cum_sum()

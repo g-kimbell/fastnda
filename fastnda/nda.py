@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from fastnda.utils import UnverifiedFormatWarning, _count_changes, _drop_empty, _range_to_mult
+from fastnda.utils import UnverifiedFormatWarning, _count_changes, _drop_empty, _range_to_mult, _step_sign
 
 logger = logging.getLogger(__name__)
 
@@ -907,12 +907,18 @@ def _read_nda_25(mm: mmap.mmap) -> pl.DataFrame:
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
                 _count_changes(pl.col("step_index")).alias("step_count"),
                 pl.col("current_mA") * multiplier,
-                (pl.col("capacity_mAh").cast(pl.Float64) * multiplier * pl.col("current_mA").sign() / 3600).cast(
-                    pl.Float32
-                ),
-                (pl.col("energy_mWh").cast(pl.Float64) * multiplier * pl.col("current_mA").sign() / 3600).cast(
-                    pl.Float32
-                ),
+                (
+                    pl.col("capacity_mAh").cast(pl.Float64)
+                    * multiplier
+                    * _step_sign(pl.col("step_type"), pl.col("current_mA"))
+                    / 3600
+                ).cast(pl.Float32),
+                (
+                    pl.col("energy_mWh").cast(pl.Float64)
+                    * multiplier
+                    * _step_sign(pl.col("step_type"), pl.col("current_mA"))
+                    / 3600
+                ).cast(pl.Float32),
             ]
         )
         .drop("range")
