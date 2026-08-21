@@ -589,9 +589,13 @@ def _read_nda_3(mm: mmap.mmap) -> pl.DataFrame:
 
 
 def _read_nda_5(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 5 (file versions 5, 6, 7, 8)."""
-    # Identify the beginning of the data section - first byte 255 and index = 1
-    arr = _get_arr_from_nda(mm, header=b"\xff\x01\x00\x00\x00", record_len=59)
+    """Read nda version 5 (file versions 5, 6, 7, 8).
+
+    Identifier is 0 for versions 5, 6, 8, or 85 for 7.
+    Raw cycle_count is 0-indexed for 5, 7, 1-indexed for 6, 8.
+    """
+    header_idx, data_len = _nda_head_main(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=59, data_len=data_len)
     dtype = np.dtype(
         [
             ("identifier", "<u1"),
@@ -610,19 +614,27 @@ def _read_nda_5(mm: mmap.mmap) -> pl.DataFrame:
         ]
     )
     multiplier = _nda_multiplier(mm)
-    return _mask_arr(arr, dtype, 0).with_columns(
-        [
-            pl.col("step_time_s").cast(pl.Float32),
-            pl.col("voltage_V").cast(pl.Float32) / 10000,
-            pl.col("current_mA") * multiplier,
-            (
-                pl.col(["capacity_mAh", "energy_mWh"]).cast(pl.Float64)
-                * multiplier
-                * pl.col("current_mA").sign()
-                / 3600
-            ).cast(pl.Float32),
-            _count_changes(pl.col("step_index")).alias("step_count"),
-        ]
+    nda_version = int(mm[14])
+    cycle_offset = 1 if nda_version in (5, 7) else 0
+    return (
+        _view_arr(arr, dtype)
+        .filter(pl.col("identifier").is_in([0, 85]))
+        .drop("identifier")
+        .with_columns(
+            [
+                pl.col("cycle_count") + cycle_offset,
+                pl.col("step_time_s").cast(pl.Float32),
+                pl.col("voltage_V").cast(pl.Float32) / 10000,
+                pl.col("current_mA") * multiplier,
+                (
+                    pl.col(["capacity_mAh", "energy_mWh"]).cast(pl.Float64)
+                    * multiplier
+                    * pl.col("current_mA").sign()
+                    / 3600
+                ).cast(pl.Float32),
+                _count_changes(pl.col("step_index")).alias("step_count"),
+            ]
+        )
     )
 
 
