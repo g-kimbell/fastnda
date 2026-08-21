@@ -765,6 +765,7 @@ class TestReadNda14:
             columns={
                 "index": [1, 2],
                 "step_index": [1, 2],
+                "step_count": [113, 0],
                 "step_type": [1, 2],
                 "step_time_s": [10000, 20000],
                 "voltage_V": [36000, 35000],

@@ -65,9 +65,15 @@ def _step_sign(step_type: pl.Expr, current_col: pl.Expr) -> pl.Expr:
     return (step_type.replace_strict(CHARGE_DISCHARGE_MAP, default=None) * 2 - 1).fill_null(current_col.sign())
 
 
-def _count_changes(series: pl.Expr) -> pl.Expr:
-    """Enumerate the number of value changes in a series."""
-    return series.diff().fill_null(1).abs().gt(0).cum_sum()
+def _count_changes(*series: pl.Expr) -> pl.Expr:
+    """Enumerate the number of value changes across one or more series.
+
+    A row counts as a change if any of the given series changes value there.
+    """
+    changed = series[0].diff().fill_null(1).abs().gt(0)
+    for s in series[1:]:
+        changed = changed | s.diff().fill_null(1).abs().gt(0)
+    return changed.cum_sum()
 
 
 def _id_first_state(df: pl.DataFrame) -> Literal["chg", "dchg"]:
