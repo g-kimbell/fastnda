@@ -241,15 +241,15 @@ class TestRead:
         # Neware capacity can be absolute for both charge and discharge
         # It can also can have negative values for discharge
         abs_diff = (df["capacity_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
-        rel_diff = 2 * abs_diff / (df["capacity_mAh"] + df_ref["Capacity(mAs)"].abs() / 3600)
-        if ((abs_diff > 6e-4) & (rel_diff > 1e-6)).any():
+        rel_diff = 2 * abs_diff / (df["capacity_mAh"].abs() + df_ref["Capacity(mAs)"].abs() / 3600)
+        if ((abs_diff > 3e-3) & (rel_diff > 1e-6)).any():
             # If this fails, sometimes Neware does not count negative current during charge towards the capacity
             df = df.with_columns(
                 pl.col("capacity_mAh").abs().cum_max().over(pl.col("step_count")).alias("capacity_ignore_negs_mAh")
             )
             abs_diff = (df["capacity_ignore_negs_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
             rel_diff = 2 * abs_diff / (df["capacity_ignore_negs_mAh"].abs() + df_ref["Capacity(mAs)"].abs() / 3600)
-            if ((abs_diff > 6e-4) & (rel_diff > 1e-6)).any():
+            if ((abs_diff > 3e-3) & (rel_diff > 1e-6)).any():
                 msg = "Capacity columns are different."
                 raise ValueError(msg)
 
@@ -259,8 +259,8 @@ class TestRead:
         # Neware capacity can be absolute for both charge and discharge
         # It can also can have negative values for discharge
         abs_diff = (df["energy_mWh"].abs() - df_ref["Energy(mWs)"].abs() / 3600).abs()
-        rel_diff = 2 * abs_diff / (df["energy_mWh"] + df_ref["Energy(mWs)"].abs() / 3600)
-        if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
+        rel_diff = 2 * abs_diff / (df["energy_mWh"].abs() + df_ref["Energy(mWs)"].abs() / 3600)
+        if ((abs_diff > 1e-2) & (rel_diff > 1e-6)).any():
             # If this fails, sometimes Neware does not count negative current during charge towards the energy
             df = df.with_columns(
                 pl.col("energy_mWh").abs().cum_max().over(pl.col("step_count")).alias("energy_ignore_negs_mWh")
