@@ -142,12 +142,13 @@ class TestRead:
 
     def test_index(self, parsed_data: tuple) -> None:
         """Index should be UInt32 monotonically increasing by 1."""
-        df, _df_ref = parsed_data
-        assert_series_equal(
-            df["index"],
-            pl.Series("ref_index", range(1, len(df) + 1), dtype=pl.UInt32),
-            check_names=False,
+        df, df_ref = parsed_data
+        ref_index = (
+            df_ref["DataPoint"]
+            if "DataPoint" in df_ref.columns
+            else pl.Series("ref_index", range(1, len(df) + 1), dtype=pl.UInt32)
         )
+        assert_series_equal(df["index"], ref_index, check_names=False)
 
     def test_step_time(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Step time should agree within 1 us."""

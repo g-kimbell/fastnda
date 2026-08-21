@@ -44,6 +44,7 @@ dtypes = {
     "Energy(mWs)": pl.Float32,
     "Date": pl.Datetime("ms"),
     "Step Count": pl.UInt32,
+    "DataPoint": pl.UInt32,
 }
 
 
