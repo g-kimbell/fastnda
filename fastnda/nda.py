@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from fastnda.utils import UnverifiedFormatWarning, _count_changes, _range_to_mult
+from fastnda.utils import UnverifiedFormatWarning, _count_changes, _drop_empty, _range_to_mult
 
 logger = logging.getLogger(__name__)
 
@@ -733,8 +733,7 @@ def _read_nda_11(mm: mmap.mmap) -> pl.DataFrame:
             ("step_time_s", "<u8"),
             ("voltage_V", "<i4"),
             ("current_mA", "<i4"),
-            ("aux_temperature_degC", "<i4"),
-            ("aux_voltage_V", "<i4"),
+            ("_pad3", "V8"),  # aux channels
             ("capacity_mAh", "<i8"),
             ("energy_mWh", "<i8"),
             ("unix_time_s", "<u8"),
@@ -743,7 +742,7 @@ def _read_nda_11(mm: mmap.mmap) -> pl.DataFrame:
         ]
     )
     multiplier = _nda_multiplier(mm, pl.col("range"))
-    return (
+    data_df = (
         _mask_arr(arr, dtype, 85)
         .with_columns(
             [
@@ -757,13 +756,36 @@ def _read_nda_11(mm: mmap.mmap) -> pl.DataFrame:
                 (pl.col("energy_mWh").cast(pl.Float64) * multiplier * pl.col("current_mA").sign() / 3600).cast(
                     pl.Float32
                 ),
-                pl.col("aux_temperature_degC").cast(pl.Float32) / 10,
-                pl.col("aux_voltage_V").cast(pl.Float32) / 10000,  # best guess
                 _count_changes(pl.col("step_index")).alias("step_count"),
             ]
         )
         .drop("range")
     )
+
+    aux_begin, aux_len = _nda_head_main(mm, pos_offset=72)
+    aux_df = pl.DataFrame(schema={"index": pl.UInt32})
+    if aux_len:
+        aux_arr = _get_arr_from_nda(mm, header=aux_begin, record_len=69, data_len=aux_len)
+        aux_dtype = np.dtype(
+            [
+                ("identifier", "<u1"),
+                ("aux", "<u1"),
+                ("index", "<u4"),
+                ("_pad1", "V15"),
+                ("aux_voltage_V", "<i4"),  # best guess, offset unconfirmed - always 0 in test data
+                ("_pad2", "V8"),
+                ("aux_temperature_degC", "<i2"),
+                ("_pad3", "V34"),
+            ]
+        )
+        aux_df = _mask_arr(aux_arr, aux_dtype, 101).with_columns(
+            [
+                pl.col("aux_temperature_degC").cast(pl.Float32) / 10,
+                pl.col("aux_voltage_V").cast(pl.Float32) / 10000,  # best guess
+            ]
+        )
+        aux_df = _drop_empty(aux_df, ["aux_voltage_V", "aux_temperature_degC"])
+    return _merge_aux(data_df, aux_df)
 
 
 def _read_nda_14(mm: mmap.mmap) -> pl.DataFrame:
