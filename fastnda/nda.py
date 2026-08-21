@@ -725,7 +725,7 @@ def _read_nda_11(mm: mmap.mmap) -> pl.DataFrame:
     dtype = np.dtype(
         [
             ("identifier", "<u1"),
-            ("_pad0", "V1"),  # btAuxChlID
+            ("_pad1", "V1"),  # aux ID
             ("index", "<u4"),
             ("cycle_count", "<u4"),
             ("step_index", "<u2"),
@@ -733,7 +733,8 @@ def _read_nda_11(mm: mmap.mmap) -> pl.DataFrame:
             ("step_time_s", "<u8"),
             ("voltage_V", "<i4"),
             ("current_mA", "<i4"),
-            ("_pad1", "V8"),  # nIR, iTemp
+            ("aux_temperature_degC", "<i4"),
+            ("aux_voltage_V", "<i4"),
             ("capacity_mAh", "<i8"),
             ("energy_mWh", "<i8"),
             ("unix_time_s", "<u8"),
@@ -756,6 +757,8 @@ def _read_nda_11(mm: mmap.mmap) -> pl.DataFrame:
                 (pl.col("energy_mWh").cast(pl.Float64) * multiplier * pl.col("current_mA").sign() / 3600).cast(
                     pl.Float32
                 ),
+                pl.col("aux_temperature_degC").cast(pl.Float32) / 10,
+                pl.col("aux_voltage_V").cast(pl.Float32) / 10000,  # best guess
                 _count_changes(pl.col("step_index")).alias("step_count"),
             ]
         )
