@@ -274,13 +274,31 @@ class TestRead:
                 msg = f"Energy columns differ by up to {max(abs_diff):.2e} mWh (or {max(rel_diff) * 100:2g}%)."
                 note(msg)
 
-    def test_capacity_energy_sign(self, parsed_data: tuple) -> None:
-        """Capacity/energy should have same sign as current."""
+    def test_capacity_energy_sign(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
+        """Each capacity/energy increment should share sign with current."""
         df, _df_ref = parsed_data
-        # Take the mean, as current can reverse sign within one step
-        df_avg = df.group_by(pl.col("step_count")).mean()
-        assert all(df_avg["capacity_mAh"].sign() == df_avg["current_mA"].sign())
-        assert all(df_avg["energy_mWh"].sign() == df_avg["current_mA"].sign())
+        cap = df.select(
+            pl.col("capacity_mAh").diff().over("step_count").alias("capacity_diff"),
+            pl.col("current_mA"),
+        ).drop_nulls()
+        cap_mismatch = (cap["capacity_diff"].sign() != cap["current_mA"].sign()).mean()
+        if cap_mismatch:
+            assert cap_mismatch < 0.005, f"{cap_mismatch:.3%} of capacity increments disagree in sign with current."
+            if cap_mismatch > 0.001:
+                note(f"{cap_mismatch:.3%} of capacity increments disagree in sign with current.")
+
+        if "energy_mWh" not in df.columns:
+            return
+        en = df.select(
+            pl.col("energy_mWh").diff().over("step_count").alias("energy_diff"),
+            pl.col("current_mA"),
+        ).drop_nulls()
+        # This is not strictly accurate, but is how Neware treats the energy sign - see #77
+        energy_mismatch = (en["energy_diff"].sign() != en["current_mA"].sign()).mean()
+        if energy_mismatch:
+            assert energy_mismatch < 0.005, f"{energy_mismatch:.3%} of energy increments disagree in sign with current."
+            if energy_mismatch > 0.001:
+                note(f"{energy_mismatch:.3%} of energy increments disagree in sign with current.")
 
     def test_aux_cols(self, parsed_data: tuple) -> None:
         """Dataframes should have matching aux channels."""
