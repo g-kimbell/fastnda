@@ -74,8 +74,10 @@ class TestRead:
             "step_index",
             "step_type",
             "capacity_mAh",
-            "energy_mWh",
         }
+        # Some old formats never recorded energy - dropped from the reference parquet
+        if "Energy(mWs)" in df_ref.columns:
+            df_columns.add("energy_mWh")
         assert all(col in df.columns for col in df_columns), (
             f"Missing columns in DataFrame: {df_columns - set(df.columns)}"
         )
@@ -88,7 +90,6 @@ class TestRead:
             "Voltage(mV)",
             "Current(uA)",
             "Capacity(mAs)",
-            "Energy(mWs)",
         }
         assert all(col in df_ref.columns for col in df_ref_columns), (
             f"Missing columns in reference DataFrame: {df_ref_columns - set(df_ref.columns)}"
@@ -256,6 +257,9 @@ class TestRead:
     def test_energy(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Neware energy can be recorded 0.1 mWs, check to 3e-5 mWh."""
         df, df_ref = parsed_data
+        if "Energy(mWs)" not in df_ref.columns:
+            pytest.skip("This format does not record energy.")
+        assert "energy_mWh" in df.columns, "Reference records energy but the DataFrame has no energy_mWh."
         # Neware capacity can be absolute for both charge and discharge
         # It can also can have negative values for discharge
         abs_diff = (df["energy_mWh"].abs() - df_ref["Energy(mWs)"].abs() / 3600).abs()
@@ -276,7 +280,7 @@ class TestRead:
 
     def test_capacity_energy_sign(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Each capacity/energy increment should share sign with current."""
-        df, _df_ref = parsed_data
+        df, df_ref = parsed_data
         cap = df.select(
             pl.col("capacity_mAh").diff().over("step_count").alias("capacity_diff"),
             pl.col("current_mA"),
@@ -287,7 +291,7 @@ class TestRead:
             if cap_mismatch > 0.001:
                 note(f"{cap_mismatch:.3%} of capacity increments disagree in sign with current.")
 
-        if "energy_mWh" not in df.columns:
+        if "Energy(mWs)" not in df_ref.columns:
             return
         en = df.select(
             pl.col("energy_mWh").diff().over("step_count").alias("energy_diff"),
@@ -360,7 +364,9 @@ class TestRead:
         assert "step_id" in df_bdf.columns
         assert "step_type" in df_bdf.columns
         assert "step_net_capacity_ah" in df_bdf.columns
-        assert "step_net_energy_wh" in df_bdf.columns
+        if "Energy(mWs)" in df_ref.columns:
+            assert "step_net_energy_wh" in df_bdf.columns
+            assert_series_equal(df["energy_mWh"], df_bdf["step_net_energy_wh"] * 1e3, check_names=False)
 
         assert_series_equal(df["index"], df_bdf["record_index"], check_names=False)
         assert_series_equal(df["voltage_V"], df_bdf["voltage_volt"], check_names=False)
@@ -373,7 +379,6 @@ class TestRead:
         assert_series_equal(df["step_index"], df_bdf["step_id"], check_names=False)
         assert_series_equal(df["step_type"], df_bdf["step_type"], check_names=False)
         assert_series_equal(df["capacity_mAh"], df_bdf["step_net_capacity_ah"] * 1e3, check_names=False)
-        assert_series_equal(df["energy_mWh"], df_bdf["step_net_energy_wh"] * 1e3, check_names=False)
 
         # Checking correct order of magnitude, more precise value checks in other tests
         assert_series_equal(
@@ -408,11 +413,12 @@ class TestRead:
         assert "Step ID" in df_bdf.columns
         assert "Step Type" in df_bdf.columns
         assert "Step Net Capacity / Ah" in df_bdf.columns
-        assert "Step Net Energy / Wh" in df_bdf.columns
+        if "Energy(mWs)" in df_ref.columns:
+            assert "Step Net Energy / Wh" in df_bdf.columns
+            assert_series_equal(df["energy_mWh"], df_bdf["Step Net Energy / Wh"] * 1e3, check_names=False)
 
         assert_series_equal(df["current_mA"], df_bdf["Current / A"] * 1e3, check_names=False)
         assert_series_equal(df["capacity_mAh"], df_bdf["Step Net Capacity / Ah"] * 1e3, check_names=False)
-        assert_series_equal(df["energy_mWh"], df_bdf["Step Net Energy / Wh"] * 1e3, check_names=False)
 
         # Checking correct order of magnitude, more precise value checks in other tests
         assert_series_equal(

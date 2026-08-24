@@ -51,7 +51,8 @@ BDF_PREF_LABEL_MAP: Mapping[str, str] = MappingProxyType(
 
 def to_bdf(df: pl.DataFrame) -> pl.DataFrame:
     """Convert fastnda columnds to BDF machine readable columns."""
-    df = df.rename(BDF_COL_MAP)
+    col_map = {k: v for k, v in BDF_COL_MAP.items() if k in df.columns}
+    df = df.rename(col_map)
 
     # Dynamically rename any aux columns
     rename_map = {}
@@ -63,9 +64,10 @@ def to_bdf(df: pl.DataFrame) -> pl.DataFrame:
     if rename_map:
         df = df.rename(rename_map)
 
-    return df.with_columns(pl.col(k) * v for k, v in BDF_MULTIPLIER_MAP.items())
+    return df.with_columns(pl.col(k) * v for k, v in BDF_MULTIPLIER_MAP.items() if k in df.columns)
 
 
 def to_bdf_pref(df: pl.DataFrame) -> pl.DataFrame:
     """Convert fastnda columnds to BDF preferred label columns."""
-    return to_bdf(df).rename(BDF_PREF_LABEL_MAP)
+    df = to_bdf(df)
+    return df.rename({k: v for k, v in BDF_PREF_LABEL_MAP.items() if k in df.columns})
