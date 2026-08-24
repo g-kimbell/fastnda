@@ -75,7 +75,7 @@ def read(
     if "total_time_s" not in df.columns:
         max_df = (
             df.group_by("step_count")
-            .agg(pl.col("step_time_s").max().alias("max_step_time_s"))
+            .agg(pl.col("step_time_s").max().cast(pl.Float64).alias("max_step_time_s"))
             .sort("step_count")
             .with_columns(pl.col("max_step_time_s").shift(1).fill_null(0).cum_sum())
         )

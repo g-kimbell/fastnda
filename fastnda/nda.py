@@ -497,7 +497,7 @@ def _read_nda_1(mm: mmap.mmap) -> pl.DataFrame:
         .filter(pl.col("index") != 0)
         .with_columns(
             [
-                pl.col("step_time_s").cast(pl.Float32),
+                pl.col("step_time_s").cast(pl.Float64),
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
                 pl.col("current_mA") * multiplier,
                 pl.col("step_type").replace(step_remap),
@@ -542,7 +542,7 @@ def _read_nda_2(mm: mmap.mmap) -> pl.DataFrame:
         .with_columns(
             [
                 pl.int_range(1, pl.len() + 1).alias("index"),
-                pl.col("step_time_s").cast(pl.Float32),
+                pl.col("step_time_s").cast(pl.Float64),
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
                 pl.col("current_mA") * multiplier,
                 (
@@ -634,7 +634,7 @@ def _read_nda_5(mm: mmap.mmap) -> pl.DataFrame:
         .with_columns(
             [
                 pl.col("cycle_count") + cycle_offset,
-                pl.col("step_time_s").cast(pl.Float32),
+                pl.col("step_time_s").cast(pl.Float64),
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
                 pl.col("current_mA") * multiplier,
                 (
@@ -675,7 +675,7 @@ def _read_nda_9(mm: mmap.mmap) -> pl.DataFrame:
     return _mask_arr(arr, dtype, 85).with_columns(
         [
             pl.col("cycle_count") + 1,
-            pl.col("step_time_s").cast(pl.Float32),
+            pl.col("step_time_s").cast(pl.Float64),
             pl.col("voltage_V").cast(pl.Float32) / 10000,
             pl.col("current_mA") * multiplier,
             (
@@ -715,7 +715,7 @@ def _read_nda_10(mm: mmap.mmap) -> pl.DataFrame:
     return _mask_arr(arr, dtype, 85).with_columns(
         [
             pl.col("cycle_count") + 1,
-            pl.col("step_time_s").cast(pl.Float32) / 1000,
+            pl.col("step_time_s").cast(pl.Float64),
             pl.col("voltage_V").cast(pl.Float32) / 10000,
             pl.col("current_mA") * multiplier,
             (
@@ -758,7 +758,7 @@ def _read_nda_11(mm: mmap.mmap) -> pl.DataFrame:
         .with_columns(
             [
                 pl.col("cycle_count") + 1,
-                pl.col("step_time_s").cast(pl.Float32) / 1000,
+                pl.col("step_time_s").cast(pl.Float64) / 1000,
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
                 pl.col("current_mA") * multiplier,
                 (
@@ -837,7 +837,7 @@ def _read_nda_14(mm: mmap.mmap) -> pl.DataFrame:
         .with_columns(
             [
                 pl.col("cycle_count") + 1,
-                pl.col("step_time_s").cast(pl.Float32) / 1000,
+                pl.col("step_time_s").cast(pl.Float64) / 1000,
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
                 _count_changes(pl.col("step_index"), pl.col("step_count")).alias("step_count"),
                 pl.col("current_mA") * multiplier,
@@ -881,7 +881,7 @@ def _read_nda_19(mm: mmap.mmap) -> pl.DataFrame:
     return _mask_arr(arr, dtype, 85).with_columns(
         [
             pl.col("cycle_count") + 1,
-            pl.col("step_time_s").cast(pl.Float32),
+            pl.col("step_time_s").cast(pl.Float64),
             pl.col("voltage_V").cast(pl.Float32) / 10000,
             pl.col("current_mA") * multiplier,
             (pl.col(mult_cols).cast(pl.Float64) * multiplier / 3600).cast(pl.Float32),
@@ -920,7 +920,7 @@ def _read_nda_25(mm: mmap.mmap) -> pl.DataFrame:
         .with_columns(
             [
                 _count_changes(pl.col("cycle_count")),
-                pl.col("step_time_s").cast(pl.Float32) / 1000,
+                pl.col("step_time_s").cast(pl.Float64) / 1000,
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
                 _count_changes(pl.col("step_index")).alias("step_count"),
                 pl.col("current_mA") * multiplier,
@@ -980,7 +980,7 @@ def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
         .with_columns(
             [
                 pl.col("cycle_count") + 1,
-                pl.col("step_time_s").cast(pl.Float32) / 1000,
+                pl.col("step_time_s").cast(pl.Float64) / 1000,
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
                 pl.datetime(pl.col("Y"), pl.col("M"), pl.col("D"), pl.col("h"), pl.col("m"), pl.col("s")).alias(
                     "timestamp"
@@ -1114,7 +1114,7 @@ def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
             pl.col("capacity_mAs").clip(upper_bound=0).abs().alias("discharge_capacity_mAh") / 3600,
             pl.col("energy_mWs").clip(lower_bound=0).alias("charge_energy_mWh") / 3600,
             pl.col("energy_mWs").clip(upper_bound=0).abs().alias("discharge_energy_mWh") / 3600,
-            (pl.col("total_time_s") + pl.col("time_ns") / 1e9).cast(pl.Float32),
+            (pl.col("total_time_s") + pl.col("time_ns") / 1e9).cast(pl.Float64),
             (pl.col("unix_time_s") + pl.col("uts_ns") / 1e9).alias("unix_time_s"),
             pl.col("cycle_count") + 1,
             _count_changes(pl.col("step_index")).alias("step_count"),
@@ -1162,7 +1162,7 @@ def _read_nda_130_90(mm: mmap.mmap) -> pl.DataFrame:
     return _mask_arr(arr, data_dtype, 85).with_columns(
         [
             pl.col("unix_time_s").cast(pl.Float64) / 1e6,  # us -> s
-            (pl.col("step_time_s") / 1e6).cast(pl.Float32),  # us -> s
+            (pl.col("step_time_s") / 1e6).cast(pl.Float64),  # us -> s
             pl.col(["capacity_mAh", "energy_mWh"]) / 3600,
             _count_changes(pl.col("step_index")).alias("step_count"),
         ]
