@@ -333,11 +333,21 @@ class TestRead:
                 multiplier = 1.0
             results: dict[str, float] = {}
             for ref_col in df_ref_aux:
-                results[ref_col] = sum(abs(df[test_col] - multiplier * df_ref[ref_col])) / len(df)
-                if results[ref_col] < tol:
+                ref_vals = multiplier * df_ref[ref_col]
+                # Aux channels do not always sample every row, nulls must match
+                if (df[test_col].is_null() != ref_vals.is_null()).any():
+                    continue
+                mean_diff = (df[test_col] - ref_vals).abs().mean()
+                if mean_diff is None:
+                    continue
+                results[ref_col] = mean_diff
+                if mean_diff < tol:
                     break
             else:
                 # raise an error
+                if not results:
+                    msg = f"No reference column is comparable to {test_col}, nulls do not line up with any"
+                    raise ValueError(msg)
                 closest = min(results, key=lambda x: results[x])
                 msg = (
                     f"Could not find any column matching values of {test_col}, "

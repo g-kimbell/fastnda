@@ -846,7 +846,8 @@ def _read_nda_11(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_14(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 14 (file versions 14, 16, 17, 20, 22, 23, 24)."""
-    arr = _get_arr_from_nda(mm, b"\xaa\x00\x01\x00\x00\x00", 86)
+    header_idx, data_len = _nda_head_main(mm)
+    arr = _get_arr_from_nda(mm, header=header_idx, record_len=86, data_len=data_len)
     data_dtype = np.dtype(
         [
             ("identifier", "<u1"),
@@ -871,7 +872,7 @@ def _read_nda_14(mm: mmap.mmap) -> pl.DataFrame:
     )
     multiplier = _nda_multiplier(mm, pl.col("range"))
     mult_cols = ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"]
-    return (
+    data_df = (
         _mask_arr(arr, data_dtype, 85)
         .with_columns(
             [
@@ -885,6 +886,31 @@ def _read_nda_14(mm: mmap.mmap) -> pl.DataFrame:
         )
         .drop("range")
     )
+
+    aux_begin, aux_len = _nda_head_main(mm, pos_offset=72)
+    aux_df = pl.DataFrame(schema={"index": pl.UInt32})
+    if aux_len:
+        aux_arr = _get_arr_from_nda(mm, header=aux_begin, record_len=86, data_len=aux_len)
+        aux_dtype = np.dtype(
+            [
+                ("identifier", "<u1"),
+                ("aux", "<u1"),
+                ("index", "<u4"),
+                ("_pad1", "V16"),
+                ("aux_voltage_V", "<i4"),
+                ("_pad2", "V8"),
+                ("aux_temperature_degC", "<i2"),
+                ("_pad3", "V50"),
+            ]
+        )
+        aux_df = _mask_arr(aux_arr, aux_dtype, 101).with_columns(
+            [
+                pl.col("aux_temperature_degC").cast(pl.Float32) / 10,  # 0.1'C -> 'C
+                pl.col("aux_voltage_V").cast(pl.Float32) / 10000,  # 0.1 mV -> V
+            ]
+        )
+        aux_df = _drop_empty(aux_df, ["aux_voltage_V", "aux_temperature_degC"])
+    return _merge_aux(data_df, aux_df)
 
 
 def _read_nda_19(mm: mmap.mmap) -> pl.DataFrame:
