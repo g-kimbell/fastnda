@@ -583,8 +583,8 @@ def _read_nda_3(mm: mmap.mmap) -> pl.DataFrame:
         .drop("identifier")
         .with_columns(
             [
-                pl.col("cycle_count") + 1,
-                pl.col("step_time_s").cast(pl.Float32),
+                _count_changes(pl.col("cycle_count")),
+                pl.col("step_time_s").cast(pl.Float64),
                 pl.col("voltage_V").cast(pl.Float32) / 10000,
                 pl.col("current_mA") * multiplier,
                 (
@@ -714,7 +714,7 @@ def _read_nda_10(mm: mmap.mmap) -> pl.DataFrame:
     multiplier = _nda_multiplier(mm)
     return _mask_arr(arr, dtype, 85).with_columns(
         [
-            pl.col("cycle_count") + 1,
+            _count_changes(pl.col("cycle_count")),
             pl.col("step_time_s").cast(pl.Float64),
             pl.col("voltage_V").cast(pl.Float32) / 10000,
             pl.col("current_mA") * multiplier,
