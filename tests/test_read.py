@@ -84,7 +84,6 @@ class TestRead:
         df_ref_columns = {
             "Time",
             "Total Time",
-            "Date",
             "Step Index",
             "Step Count",
             "Voltage(mV)",
@@ -202,6 +201,15 @@ class TestRead:
         df, df_ref = parsed_data
         if len(df) == 0 and len(df_ref) == 0:
             return
+        # Cannot cycle cells before Neware was founded in 1998
+        assert df["unix_time_s"].min() > 883609200
+
+        # Some old formats never recorded a timestamp - dropped from the reference parquet
+        if "Date" not in df_ref.columns:
+            # Derived from the test time, so it can only increase
+            assert df["unix_time_s"].is_sorted(), "Derived unix_time_s is not monotonically increasing."
+            pytest.skip("This format does not record a timestamp.")
+
         # Cannot compare date directly - Neware datetime is not timezone aware.
         duts = df["unix_time_s"] - df["unix_time_s"][0]
         datetime_ref = df_ref["Date"].cast(pl.Float64) / 1000
@@ -212,9 +220,6 @@ class TestRead:
             check_names=False,
             abs_tol=5e-7,
         )
-
-        # Cannot cycle cells before Neware was founded in 1998
-        assert df["unix_time_s"].min() > 883609200
 
     def test_voltage(self, parsed_data: tuple) -> None:
         """Voltage usually recorded to 0.1 mV, should agree within 0.05 mV."""

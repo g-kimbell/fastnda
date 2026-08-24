@@ -108,6 +108,21 @@ def _range_to_mult(series: pl.Expr) -> pl.Expr:
     )  # fmt: skip
 
 
+def _add_total_time(df: pl.DataFrame) -> pl.DataFrame:
+    """Add total_time_s from step_time_s."""
+    max_df = (
+        df.group_by("step_count")
+        .agg(pl.col("step_time_s").max().cast(pl.Float64).alias("_prev_steps_s"))
+        .sort("step_count")
+        .with_columns(pl.col("_prev_steps_s").shift(1).fill_null(0).cum_sum())
+    )
+    return (
+        df.join(max_df, on="step_count", how="left")
+        .with_columns((pl.col("step_time_s") + pl.col("_prev_steps_s")).alias("total_time_s"))
+        .drop("_prev_steps_s")
+    )
+
+
 def _drop_empty(df: pl.DataFrame, cols: list[str] | None) -> pl.DataFrame:
     """Drop empty columns."""
     # Drop empty columns

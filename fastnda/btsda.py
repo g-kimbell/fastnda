@@ -88,9 +88,12 @@ def btsda_csv_to_parquet(csv_file: str | Path, out_file: str | Path | None = Non
     aux_cols = [c for c in df.columns if re.match(r"^[TtHV]\d+", c)]
     df = df.select(list(dtypes.keys()) + aux_cols)
     df = df.cast({**dtypes, **dict.fromkeys(aux_cols, pl.Float32)})
-    # Some old Neware formats never recorded energy, BTSDA reports it as all-zero, fastnda skips it.
+    # Some old Neware formats do not record energy, BTSDA reports it as all-zero, fastnda skips it.
     if (df["Energy(mWs)"] == 0).all() and (df["Current(uA)"] != 0).any():
         df = df.drop("Energy(mWs)")
+    # Some old Neware formats do not record unix time, BTSDA reports a constant placeholder, fastnda derives it
+    if df["Date"].n_unique() == 1 and (df["Total Time"] > 0).any():
+        df = df.drop("Date")
     # Brotli seems to have best file size, we don't care about speed
     # Trying to keep repo small with lots of test data
     df.write_parquet(out_file, compression="brotli", compression_level=11)

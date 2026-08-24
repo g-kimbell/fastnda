@@ -73,15 +73,9 @@ def read(
     from fastnda.dicts import DTYPE_MAP, STEP_TYPE_MAP
 
     if "total_time_s" not in df.columns:
-        max_df = (
-            df.group_by("step_count")
-            .agg(pl.col("step_time_s").max().cast(pl.Float64).alias("max_step_time_s"))
-            .sort("step_count")
-            .with_columns(pl.col("max_step_time_s").shift(1).fill_null(0).cum_sum())
-        )
-        df = df.join(max_df, on="step_count", how="left").with_columns(
-            (pl.col("step_time_s") + pl.col("max_step_time_s")).alias("total_time_s")
-        )
+        from fastnda.utils import _add_total_time
+
+        df = _add_total_time(df)
 
     # Round time to us, step_type -> categories, merge charge/discharge capacity/energy
     cols = []

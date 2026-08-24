@@ -7,12 +7,20 @@ import mmap
 import re
 import warnings
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 
 import numpy as np
 import polars as pl
 
-from fastnda.utils import UnverifiedFormatWarning, _count_changes, _drop_empty, _range_to_mult, _step_sign
+from fastnda.utils import (
+    UnverifiedFormatWarning,
+    _add_total_time,
+    _count_changes,
+    _drop_empty,
+    _range_to_mult,
+    _step_sign,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +115,33 @@ def _read_nda_test_info(mm: mmap.mmap, nda_version: int) -> dict[str, str]:
         name: record[offset : offset + length].split(b"\x00", 1)[0].decode("gb2312", errors="ignore").strip()
         for name, (offset, length) in fields.items()
     }
+
+
+_START_TIME_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y.%m.%d %H:%M:%S")
+
+
+def _read_nda_start_time_s(mm: mmap.mmap, nda_version: int) -> float | None:
+    """Read the test-level start_time and parse it to unix seconds (UTC)."""
+    start_time = _read_nda_test_info(mm, nda_version).get("start_time")
+    if not start_time:
+        return None
+    for fmt in _START_TIME_FORMATS:
+        with suppress(ValueError):
+            return datetime.datetime.strptime(start_time, fmt).replace(tzinfo=datetime.timezone.utc).timestamp()
+    return None
+
+
+def _add_derived_unix_time(df: pl.DataFrame, start_time_s: float | None) -> pl.DataFrame:
+    """Derive unix_time_s from the test start time plus test time.
+
+    Best guess for formats that do not include unix time.
+    Can drift from wall clock if the test was paused or resumed.
+    """
+    df = _add_total_time(df)
+    if start_time_s is None:
+        logger.info("No test start time found, cannot derive unix_time_s.")
+        return df
+    return df.with_columns((pl.col("total_time_s") + start_time_s).alias("unix_time_s"))
 
 
 def _read_nda_version_info(mm: mmap.mmap) -> dict[str, str]:
@@ -492,7 +527,8 @@ def _read_nda_1(mm: mmap.mmap) -> pl.DataFrame:
     # The remap is incomplete, needs more test data
     step_remap = {2: 3, 4: 2, 5: 4}
     multiplier = _nda_multiplier(mm)
-    return (
+    start_time_s = _read_nda_start_time_s(mm, 1)
+    df = (
         _view_arr(arr, dtype)
         .filter(pl.col("index") != 0)
         .with_columns(
@@ -514,6 +550,7 @@ def _read_nda_1(mm: mmap.mmap) -> pl.DataFrame:
             ).cast(pl.Float32),
         )
     )
+    return _add_derived_unix_time(df, start_time_s)
 
 
 def _read_nda_2(mm: mmap.mmap) -> pl.DataFrame:
@@ -577,7 +614,8 @@ def _read_nda_3(mm: mmap.mmap) -> pl.DataFrame:
         ]
     )
     multiplier = _nda_multiplier(mm)
-    return (
+    start_time_s = _read_nda_start_time_s(mm, 3)
+    df = (
         _view_arr(arr, dtype)
         .filter(pl.col("identifier").is_in([0, 85]))
         .drop("identifier")
@@ -597,6 +635,7 @@ def _read_nda_3(mm: mmap.mmap) -> pl.DataFrame:
             ]
         )
     )
+    return _add_derived_unix_time(df, start_time_s)
 
 
 def _read_nda_5(mm: mmap.mmap) -> pl.DataFrame:
