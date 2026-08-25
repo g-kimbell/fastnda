@@ -120,6 +120,8 @@ class TestRead:
                 .str.replace_all(" ", "_")
                 .str.replace_all("Dchg", "DChg")
                 .str.replace_all("Pulse_Step", "Pulse")
+                .str.replace_all("RI_Chg", "CR_Chg")
+                .str.replace_all("RI_DChg", "CR_DChg")
             ),
             check_names=False,
         )
