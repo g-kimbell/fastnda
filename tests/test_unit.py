@@ -77,9 +77,14 @@ def test_nda_aux_merge_no_aux_col() -> None:
 
 def test_read_nda_130_91_odd_size() -> None:
     """Test reading nda 130-91 with different record lengths (52,56,60)."""
-    header = (
-        "4e455741524532303234303430338200130010b70500000000007b010000000000008bb8050000000000e1010000000000006cba05"
-    ).ljust(2048, "0")
+    _header = bytearray.fromhex(
+        (
+            "4e455741524532303234303430338200130010b70500000000007b010000000000008bb8050000000000e1010000000000006cba05"
+        ).ljust(2048, "0")
+    )
+    # {begin, length} pointer to the data block, length 0 reads to the end of the file
+    _header[82:90] = (1024).to_bytes(8, "little")
+    header = _header.hex()
     records = [
         "550601042b0000000100000000000000809698000000000090727840000000000000000000000000000000002d3e54668006d139",
         "550601042b000000020000000c00000000497f0f00000000d4717840000000000000000000000000000000003a3e54668085b50d",

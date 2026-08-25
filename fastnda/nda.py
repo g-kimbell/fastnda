@@ -458,6 +458,15 @@ def _nda_head_main(mm: mmap.mmap, *, pos_offset: int = 64, pos64: bool = False) 
     return begin, length
 
 
+def _bts9_data_block(mm: mmap.mmap) -> tuple[int, int]:
+    """Read the {begin, length} pointer to the main data block of a BTS9 file."""
+    begin, length = _nda_head_main(mm, pos_offset=82, pos64=True)
+    if begin == 0 and mm[1024:1030] == b"NEWARE":
+        # Can be a second header block shifted by 1024 bytes
+        begin, _ = _nda_head_main(mm, pos_offset=1024 + 82, pos64=True)
+    return begin, length
+
+
 def _nda_multiplier(mm: mmap.mmap, record_range: pl.Expr | None = None) -> pl.Expr:
     """Multiplier applied to current, capacity and energy. Fixed with optional per-row range."""
     block_begin = int.from_bytes(mm[16:20], "little")
@@ -1080,74 +1089,70 @@ def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
     return _merge_aux(data_df, aux_df)
 
 
+# Identifier byte in record, pos 4 in BTS9.0, pos 0 in BTS9.1
+_BTS9_IDENTIFIER = 85
+
+
 def _read_nda_129(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 129 (deprecated by Neware)."""
-    header_idx, _data_len = _nda_head_main(mm, pos_offset=82, pos64=True)
-    arr = _get_arr_from_nda(mm, header=header_idx, record_len=88)
+    """Read the 88-byte record block shared by nda 129 and nda 130 BTS9.0."""
+    begin, length = _bts9_data_block(mm)
+    arr = _get_arr_from_nda(mm, header=begin, record_len=88, data_len=length)
     dtype = np.dtype(
         [
+            ("_pad1", "V4"),  # btDevType, btDevID, btUnitID, btChlID
             ("identifier", "<u1"),
-            ("_pad0", "V5"),  # btDevType, btDevID, btUnitID, btChlID, btAuxChlIndex
-            ("_pad0b", "V2"),  # wReserve
-            ("_pad0c", "V4"),  # dwTestID
-            ("index", "<u4"),  # dwTestDataSN
-            ("_pad0d", "V4"),  # dwUnitNuid
+            ("_pad2", "V4"),
             ("step_index", "<u1"),
             ("step_type", "<u1"),
-            ("_pad1", "V1"),  # btStepChgCount
-            ("_pad2", "V1"),  # btReserve
-            ("_pad3", "V4"),  # stWorkStatus
-            ("step_time_s", "<u4"),  # Time64.dwS (seconds)
-            ("step_time_ns", "<u4"),  # Time64.dwNS (nanoseconds)
+            ("_pad3", "V5"),
+            ("index", "<u4"),
+            ("_pad4", "V8"),
+            ("step_time_s", "<u8"),  # microseconds
             ("voltage_V", "<f4"),
             ("current_mA", "<f4"),
             ("_pad5", "V8"),  # fInterRes, fTempture
-            ("charge_capacity_mAh", "<f4"),
-            ("charge_energy_mWh", "<f4"),
-            ("discharge_capacity_mAh", "<f4"),
-            ("discharge_energy_mWh", "<f4"),
+            ("charge_capacity_mAh", "<f4"),  # mA.s
+            ("charge_energy_mWh", "<f4"),  # mW.s
+            ("discharge_capacity_mAh", "<f4"),  # mA.s
+            ("discharge_energy_mWh", "<f4"),  # mW.s
             ("unix_time_s", "<u8"),  # microseconds
             ("_pad6", "V12"),  # dwCurStepRange, dwLogCode, dwCRC32
         ]
     )
+    # Files may or may not put a negative sign on discharge
+    # abs those cols and let main calculate net capacity/energy
     mult_cols = ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"]
-    return (
-        _view_arr(arr, dtype)
-        .filter(pl.col("identifier").is_in([0, 85]))
-        .drop("identifier")
-        .with_columns(
-            [
-                pl.col(mult_cols) / 3600,
-                (pl.col("unix_time_s").cast(pl.Float64) / 1e6).alias("unix_time_s"),
-                (pl.col("step_time_s").cast(pl.Float64) + pl.col("step_time_ns") / 1e9)
-                .cast(pl.Float32)
-                .alias("step_time_s"),
-                _count_changes(pl.col("step_index")).alias("step_count"),
-            ]
-        )
-        .drop("step_time_ns")
+    return _mask_arr(arr, dtype, _BTS9_IDENTIFIER).with_columns(
+        [
+            pl.col(mult_cols).abs() / 3600,
+            (pl.col("unix_time_s").cast(pl.Float64) / 1e6).alias("unix_time_s"),
+            (pl.col("step_time_s").cast(pl.Float64) / 1e6).alias("step_time_s"),
+            _count_changes(pl.col("step_index")).alias("step_count"),
+        ]
     )
 
 
 def _read_nda_130(mm: mmap.mmap) -> pl.DataFrame:
     """Figure out whether BTS9.0 or BTS9.1 and pass to correct function."""
-    subver = int(mm[1024])
-    if subver == 85:
+    begin, _length = _bts9_data_block(mm)
+    # Both carry identifier 85, at byte 4 of a BTS9.0 record and byte 0 of a BTS9.1 record
+    if mm[begin + 4] == _BTS9_IDENTIFIER:
+        return _read_nda_129(mm)
+    if mm[begin] == _BTS9_IDENTIFIER:
         return _read_nda_130_91(mm)
-    if subver == 18:
-        return _read_nda_130_90(mm)
-    msg = f"nda 130 subversion {subver} not supported"
+    msg = f"nda 130 data block at {begin} does not match BTS9.0 or BTS9.1"
     raise NotImplementedError(msg)
 
 
 def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 130 BTS9.1."""
-    # Data starts at 1024, search forward for next identifier for record length
-    identifier_bytes = mm[1024:1026]
+    # Search forward from the first record for the next identifier to get the record length
+    begin, length = _bts9_data_block(mm)
+    identifier_bytes = mm[begin : begin + 2]
     identifier_int = int.from_bytes(identifier_bytes, byteorder="little", signed=False)
-    record_len = mm.find(mm[1024:1026], 1026) - 1024
+    record_len = mm.find(identifier_bytes, begin + 2) - begin
 
-    arr = _get_arr_from_nda(mm, 1024, record_len)
+    arr = _get_arr_from_nda(mm, begin, record_len, data_len=length)
 
     # In BTS9.1, data and aux are in the same rows
     dtype_list = [
@@ -1197,41 +1202,6 @@ def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
         (pl.col("total_time_s") - pl.col("max_total_time_s")).alias("step_time_s")
     )
     return data_df.drop(["uts_ns", "energy_mWs", "capacity_mAs", "time_ns", "max_total_time_s"])
-
-
-def _read_nda_130_90(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 130 BTS9.0."""
-    # Data start seems to be (18, 80, 0, 7, 85, 129, 1, 6)
-    # Aux identifiers are (18, 80, 0, 7, 88, 129, 1, 6) and (18, 80, 0, 7, 89, 129, 1, 6)
-    arr = _get_arr_from_nda(mm, header=b"\x12\x50\x00\x07\x55\x81\x01\x06", record_len=88)
-    data_dtype = np.dtype(
-        [
-            ("_pad1", "V4"),
-            ("identifier", "<u1"),
-            ("_pad2", "V4"),
-            ("step_index", "<u1"),
-            ("step_type", "<u1"),
-            ("_pad3", "V5"),
-            ("index", "<u4"),
-            ("_pad4", "V8"),
-            ("step_time_s", "<u8"),
-            ("voltage_V", "<f4"),
-            ("current_mA", "<f4"),
-            ("_pad5", "V16"),
-            ("capacity_mAh", "<f4"),
-            ("energy_mWh", "<f4"),
-            ("unix_time_s", "<u8"),
-            ("_pad6", "V12"),
-        ]
-    )
-    return _mask_arr(arr, data_dtype, 85).with_columns(
-        [
-            pl.col("unix_time_s").cast(pl.Float64) / 1e6,  # us -> s
-            (pl.col("step_time_s") / 1e6).cast(pl.Float64),  # us -> s
-            pl.col(["capacity_mAh", "energy_mWh"]) / 3600,
-            _count_changes(pl.col("step_index")).alias("step_count"),
-        ]
-    )
 
 
 # NDA FileVer code -> struct type reader

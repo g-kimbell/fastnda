@@ -994,19 +994,15 @@ class TestReadNda129:
     """NDA file version 129."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
+        ("_pad1", "V4"),
         ("identifier", "<u1"),
-        ("_pad0", "V5"),
-        ("_pad0b", "V2"),
-        ("_pad0c", "V4"),
-        ("index", "<u4"),
-        ("_pad0d", "V4"),
+        ("_pad2", "V4"),
         ("step_index", "<u1"),
         ("step_type", "<u1"),
-        ("_pad1", "V1"),
-        ("_pad2", "V1"),
-        ("_pad3", "V4"),
-        ("step_time_s", "<u4"),  # Time64.dwS (seconds)
-        ("step_time_ns", "<u4"),  # Time64.dwNS (nanoseconds)
+        ("_pad3", "V5"),
+        ("index", "<u4"),
+        ("_pad4", "V8"),
+        ("step_time_s", "<u8"),  # microseconds
         ("voltage_V", "<f4"),
         ("current_mA", "<f4"),
         ("_pad5", "V8"),
@@ -1017,7 +1013,7 @@ class TestReadNda129:
         ("unix_time_s", "<u8"),
         ("_pad6", "V12"),
     ]
-    DEFAULTS: ClassVar[dict[str, float]] = {}
+    DEFAULTS: ClassVar[dict[str, float]] = {"identifier": 85}
 
     def test_decodes_expected_values(self) -> None:
         """Pack synthetic records and check every decoded column against hand-computed values.
@@ -1029,12 +1025,10 @@ class TestReadNda129:
             self.LAYOUT,
             self.DEFAULTS,
             columns={
-                "identifier": [85, 0],  # exercise the "0 or 85" mask
                 "index": [1, 2],
                 "step_index": [1, 2],
                 "step_type": [1, 2],
-                "step_time_s": [10, 20],
-                "step_time_ns": [500_000_000, 250_000_000],  # exercises Time64 dwS+dwNS combination
+                "step_time_s": [10_500_000, 20_250_000],  # microseconds
                 "voltage_V": [3.6, 3.5],
                 "current_mA": [200.0, -150.0],
                 "charge_capacity_mAh": [1800.0, 0.0],
@@ -1044,7 +1038,7 @@ class TestReadNda129:
                 "unix_time_s": [1_700_000_000_000_000, 1_700_000_010_000_000],  # microseconds
             },
         )
-        header = _header_offset_preamble(pos_offset=82, main_begin=98, pos64=True)
+        header = _header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True)
         mm = _make_mmap(header + data)
 
         df = nda._read_nda_129(mm)
@@ -1076,21 +1070,18 @@ class TestReadNda13090:
         ("step_time_s", "<u8"),
         ("voltage_V", "<f4"),
         ("current_mA", "<f4"),
-        ("_pad5", "V16"),
-        ("capacity_mAh", "<f4"),
-        ("energy_mWh", "<f4"),
+        ("_pad5", "V8"),
+        ("charge_capacity_mAh", "<f4"),
+        ("charge_energy_mWh", "<f4"),
+        ("discharge_capacity_mAh", "<f4"),
+        ("discharge_energy_mWh", "<f4"),
         ("unix_time_s", "<u8"),
         ("_pad6", "V12"),
     ]
     DEFAULTS: ClassVar[dict[str, int]] = {"identifier": 85}
-    MAGIC: ClassVar[bytes] = b"\x12\x50\x00\x07\x55\x81\x01\x06"
 
     def test_decodes_expected_values(self) -> None:
-        """Pack synthetic records and check every decoded column against hand-computed values.
-
-        Unlike the integer structs, sign lives directly in the raw float here
-        (no separate current-sign multiplication downstream).
-        """
+        """Pack synthetic records and check every decoded column against hand-computed values."""
         data = _build_rows(
             self.LAYOUT,
             self.DEFAULTS,
@@ -1101,25 +1092,26 @@ class TestReadNda13090:
                 "step_time_s": [10_000_000, 20_000_000],  # microseconds
                 "voltage_V": [3.6, 3.5],
                 "current_mA": [200.0, -150.0],
-                "capacity_mAh": [1800.0, -900.0],
-                "energy_mWh": [3600.0, -1800.0],
+                "charge_capacity_mAh": [1800.0, 0.0],
+                "charge_energy_mWh": [3600.0, 0.0],
+                "discharge_capacity_mAh": [0.0, 900.0],
+                "discharge_energy_mWh": [0.0, 1800.0],
                 "unix_time_s": [1_700_000_000_000_000, 1_700_000_010_000_000],
             },
         )
-        # Splice in the fixed magic bytes the reader searches for - the real
-        # pad1/identifier/pad2 bytes it expects at the very start of the data
-        # section, not reproducible via generic zero-filled padding.
-        data = self.MAGIC + data[len(self.MAGIC) :]
-        mm = _make_mmap(data)
+        header = _header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True)
+        mm = _make_mmap(header + data)
 
-        df = nda._read_nda_130_90(mm)
+        df = nda._read_nda_130(mm)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "voltage_V", [3.6, 3.5])
         _assert_col(df, "current_mA", [200.0, -150.0])
-        _assert_col(df, "capacity_mAh", [0.5, -0.25])
-        _assert_col(df, "energy_mWh", [1.0, -0.5])
+        _assert_col(df, "charge_capacity_mAh", [0.5, 0.0])
+        _assert_col(df, "charge_energy_mWh", [1.0, 0.0])
+        _assert_col(df, "discharge_capacity_mAh", [0.0, 0.25])
+        _assert_col(df, "discharge_energy_mWh", [0.0, 0.5])
         _assert_col(df, "unix_time_s", [1700000000.0, 1700000010.0])
         _assert_col(df, "step_count", [1, 2])
 
@@ -1168,11 +1160,12 @@ class TestReadNda13091:
         rec_a, rec_b = data[: self.RECORD_LEN], data[self.RECORD_LEN :]
         assert len(rec_a) == self.RECORD_LEN
         assert len(rec_b) == self.RECORD_LEN
-        buf = bytearray(1024) + bytearray(rec_a) + bytearray(rec_b)
+        header = _header_offset_preamble(pos_offset=82, main_begin=1024, main_len=len(data), pos64=True)
+        buf = bytearray(header) + bytearray(1024 - len(header)) + bytearray(rec_a) + bytearray(rec_b)
         mm = _make_mmap(bytes(buf))
 
         # Pre-check: the reader infers record_len by re-finding the 2-byte
-        # identifier starting at offset 1026. Confirm our synthetic bytes
+        # identifier after the first record. Confirm our synthetic bytes
         # don't produce a spurious earlier match before trusting the result.
         expected_second_record_pos = 1024 + self.RECORD_LEN
         assert mm.find(mm[1024:1026], 1026) == expected_second_record_pos
