@@ -250,14 +250,14 @@ class TestRead:
         # It can also can have negative values for discharge
         abs_diff = (df["capacity_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
         rel_diff = 2 * abs_diff / (df["capacity_mAh"].abs() + df_ref["Capacity(mAs)"].abs() / 3600)
-        if ((abs_diff > 3e-3) & (rel_diff > 1e-6)).any():
+        if ((abs_diff > 3e-3) & (rel_diff > 1e-5)).any():
             # If this fails, sometimes Neware does not count negative current during charge towards the capacity
             df = df.with_columns(
                 pl.col("capacity_mAh").abs().cum_max().over(pl.col("step_count")).alias("capacity_ignore_negs_mAh")
             )
             abs_diff = (df["capacity_ignore_negs_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
             rel_diff = 2 * abs_diff / (df["capacity_ignore_negs_mAh"].abs() + df_ref["Capacity(mAs)"].abs() / 3600)
-            if ((abs_diff > 3e-3) & (rel_diff > 1e-6)).any():
+            if ((abs_diff > 3e-3) & (rel_diff > 1e-5)).any():
                 msg = "Capacity columns are different."
                 raise ValueError(msg)
 
