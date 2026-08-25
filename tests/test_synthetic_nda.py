@@ -138,30 +138,70 @@ def _header_offset_preamble(
     pos_offset: int,
     main_begin: int,
     *,
+    main_len: int = 0,
     pos64: bool = False,
     version_byte: int | None = None,
 ) -> bytes:
     """Build leading header bytes for a header-offset-based reader.
 
-    Zero-filled up through pos_offset + (8 if pos64 else 4), with `main_begin`
-    encoded as a little-endian uint32/uint64 at pos_offset.
+    Zero-filled up through pos_offset + 2 * (8 if pos64 else 4), holding the data
+    section's {begin, length} pointer at pos_offset.
 
     Args:
         pos_offset: Byte offset of the position-info field in the header.
-        main_begin: Value to encode there - the data section's start offset.
+        main_begin: Start offset of the data section.
+        main_len: Byte length of the data section, or 0 to read to the end of the file.
         pos64: Encode as a 64-bit pair instead of 32-bit.
-        version_byte: If given, placed at offset 14, since _read_nda_11 reads
-            mm[14] directly to pick which header layout is in play.
+        version_byte: File version, written to offset 14.
 
     Returns:
         The header preamble bytes.
 
     """
     size = 8 if pos64 else 4
-    buf = bytearray(pos_offset + size)
+    buf = bytearray(pos_offset + 2 * size)
     buf[pos_offset : pos_offset + size] = main_begin.to_bytes(size, "little")
+    buf[pos_offset + size : pos_offset + 2 * size] = main_len.to_bytes(size, "little")
     if version_byte is not None:
         buf[14] = version_byte
+    return bytes(buf)
+
+
+def _nda_1_29_header(
+    main_begin: int,
+    *,
+    main_len: int = 0,
+    current_range: int = 0,
+    version_byte: int | None = None,
+) -> bytes:
+    """Build the header of an nda_version 1-29 files.
+
+    Holds a {begin, length} pointer to the device info block at offsets 16/20
+    and one to the main data block at 64/68. The device info block has the
+    channel current range 26 bytes in.
+
+    Args:
+        main_begin: Start offset of the data section.
+        main_len: Byte length of the data section, or 0 to read to the end of the file.
+        current_range: Channel current range, scales current, capacity and energy.
+        version_byte: File version, written to offset 14.
+
+    Returns:
+        The header bytes, including the device info block.
+
+    """
+    device_block_len = 42
+    device_block_begin = 72
+    buf = bytearray(device_block_begin + device_block_len)
+    buf[0:6] = b"NEWARE"
+    if version_byte is not None:
+        buf[14] = version_byte
+    buf[16:20] = device_block_begin.to_bytes(4, "little")
+    buf[20:24] = device_block_len.to_bytes(4, "little")
+    buf[64:68] = main_begin.to_bytes(4, "little")
+    buf[68:72] = main_len.to_bytes(4, "little")
+    range_at = device_block_begin + 26
+    buf[range_at : range_at + 4] = current_range.to_bytes(4, "little", signed=True)
     return bytes(buf)
 
 
@@ -185,7 +225,7 @@ def _assert_col(df: pl.DataFrame, col: str, expected: list, *, abs_tol: float = 
 
 
 class TestReadNda1:
-    """NdaData1 (file version 1): no identifier byte, header offset 32."""
+    """NDA file version 1."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("index", "<u4"),
@@ -198,59 +238,104 @@ class TestReadNda1:
         ("_pad1", "V8"),
         ("capacity_mAh", "<i8"),
     ]
-    DEFAULTS: ClassVar[dict[str, int]] = {"cycle_count": 0}
+    DEFAULTS: ClassVar[dict[str, int]] = {}
+    COLUMNS: ClassVar[dict[str, list[int]]] = {
+        "index": [1, 2],
+        "cycle_count": [0, 1],
+        "step_index": [1, 2],
+        "step_type": [1, 4],
+        "step_time_s": [10, 20],
+        "voltage_V": [36000, 35000],
+        "current_mA": [200000, -150000],
+        "capacity_mAh": [1800000, 900000],
+    }
 
     def test_decodes_expected_values(self) -> None:
         """Pack synthetic records and check every decoded column against hand-computed values."""
-        data = _build_rows(
-            self.LAYOUT,
-            self.DEFAULTS,
-            columns={
-                "index": [1, 2],
-                "step_index": [1, 2],
-                "step_type": [1, 2],
-                "step_time_s": [10, 20],
-                "voltage_V": [36000, 35000],
-                "current_mA": [200000, -150000],
-                "capacity_mAh": [1800000, 900000],
-            },
-        )
-        header = _header_offset_preamble(pos_offset=32, main_begin=36)
+        data = _build_rows(self.LAYOUT, self.DEFAULTS, columns=self.COLUMNS)
+        header = _nda_1_29_header(main_begin=114, current_range=6000)
         mm = _make_mmap(header + data)
 
         df = nda._read_nda_1(mm)
 
         _assert_col(df, "index", [1, 2])
-        _assert_col(df, "cycle_count", [1, 1])
         _assert_col(df, "step_index", [1, 2])
+        # Raw step_type 4 remapped to 2 (CC_DChg) - nda1 uses a legacy step type enum
         _assert_col(df, "step_type", [1, 2])
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "voltage_V", [3.6, 3.5])
-        _assert_col(df, "current_mA", [200.0, -150.0])
-        _assert_col(df, "capacity_mAh", [0.5, -0.25])
+        # current_range 6000 gives a 0.1 mA multiplier
+        _assert_col(df, "current_mA", [20000.0, -15000.0])
+        _assert_col(df, "capacity_mAh", [50.0, -25.0])
         _assert_col(df, "step_count", [1, 2])
+        _assert_col(df, "cycle_count", [1, 2])
+
+    def test_current_range_scales_current_and_capacity(self) -> None:
+        """A different header current range rescales current and capacity by the same factor."""
+        data = _build_rows(self.LAYOUT, self.DEFAULTS, columns=self.COLUMNS)
+        header = _nda_1_29_header(main_begin=114, current_range=1)
+        mm = _make_mmap(header + data)
+
+        df = nda._read_nda_1(mm)
+
+        # current_range 1 gives a 1e-4 mA multiplier
+        _assert_col(df, "current_mA", [20.0, -15.0])
+        _assert_col(df, "capacity_mAh", [0.05, -0.025])
+
+    def test_stops_at_data_section_length(self) -> None:
+        """Trailing bytes past the data section length are not decoded as records."""
+        data = _build_rows(self.LAYOUT, self.DEFAULTS, columns=self.COLUMNS)
+        trailing = bytes([0xFF]) * 38
+        header = _nda_1_29_header(main_begin=114, main_len=len(data), current_range=6000)
+        mm = _make_mmap(header + data + trailing)
+
+        df = nda._read_nda_1(mm)
+
+        _assert_col(df, "index", [1, 2])
+
+    def test_either_loop_counter_starts_a_cycle(self) -> None:
+        """A change in either 16-bit half of the loop counter field increments the cycle."""
+        columns = {
+            **self.COLUMNS,
+            "index": [1, 2, 3, 4],
+            # Low half changes, then high half, then neither
+            "cycle_count": [0, 1, 1 + (1 << 16), 1 + (1 << 16)],
+            "step_index": [1, 2, 3, 3],
+            "step_type": [1, 4, 1, 1],
+            "step_time_s": [10, 20, 30, 40],
+            "voltage_V": [36000, 35000, 36000, 36000],
+            "current_mA": [200000, -150000, 200000, 200000],
+            "capacity_mAh": [1800000, 900000, 1800000, 1800000],
+        }
+        data = _build_rows(self.LAYOUT, self.DEFAULTS, columns=columns)
+        header = _nda_1_29_header(main_begin=114, current_range=6000)
+        mm = _make_mmap(header + data)
+
+        df = nda._read_nda_1(mm)
+
+        _assert_col(df, "cycle_count", [1, 2, 3, 3])
 
 
 class TestReadNda2:
-    """NdaData2 (file version 2, deprecated by Neware): identifier in {0, 85}, header offset 32."""
+    """NDA file version 2.
+
+    Unlike every other version, nda2 has no on-disk index field - `index` is
+    synthesized from row order after dropping identifier-255 marker records.
+    """
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
-        ("index", "<u4"),
+        ("_pad2", "V4"),  # Unknown
         ("cycle_count", "<u4"),
-        ("step_index", "<u1"),
         ("step_type", "<u1"),
+        ("step_index", "<u1"),
         ("step_time_s", "<u4"),
         ("voltage_V", "<i4"),
         ("current_mA", "<i4"),
-        ("_pad1", "V8"),
+        ("_pad3", "V8"),  # Unknown
         ("capacity_mAh", "<i8"),
-        ("_pad2", "V1"),
-        ("energy_mWh", "<i8"),
-        ("_pad3", "V1"),
-        ("unix_time_s", "<u8"),
     ]
-    DEFAULTS: ClassVar[dict[str, int]] = {"cycle_count": 0}
+    DEFAULTS: ClassVar[dict[str, int]] = {"cycle_count": 1}
 
     def test_decodes_expected_values(self) -> None:
         """Pack synthetic records and check every decoded column against hand-computed values."""
@@ -258,36 +343,32 @@ class TestReadNda2:
             self.LAYOUT,
             self.DEFAULTS,
             columns={
-                "identifier": [85, 0],  # exercise the "0 or 85" mask
-                "index": [1, 2],
-                "step_index": [1, 2],
-                "step_type": [1, 2],
-                "step_time_s": [10, 20],
-                "voltage_V": [36000, 35000],
-                "current_mA": [200000, -150000],
-                "capacity_mAh": [1800000, 900000],
-                "energy_mWh": [3600000, 1800000],
-                "unix_time_s": [1700000000, 1700000010],
+                # Leading marker record (identifier=255) - filtered out, and given
+                # values that would fail the assertions below if it leaked through.
+                "identifier": [255, 0, 0],
+                "step_index": [9, 1, 2],
+                "step_type": [9, 1, 2],
+                "step_time_s": [99999, 10, 20],
+                "voltage_V": [-99999999, 36000, 35000],
+                "current_mA": [99999999, 200000, -150000],
+                "capacity_mAh": [99999999, 1800000, 900000],
             },
         )
-        header = _header_offset_preamble(pos_offset=32, main_begin=36)
+        header = _nda_1_29_header(main_begin=114, current_range=10)
         mm = _make_mmap(header + data)
 
         df = nda._read_nda_2(mm)
 
         _assert_col(df, "index", [1, 2])
-        _assert_col(df, "cycle_count", [1, 1])
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "voltage_V", [3.6, 3.5])
         _assert_col(df, "current_mA", [200.0, -150.0])
         _assert_col(df, "capacity_mAh", [0.5, -0.25])
-        _assert_col(df, "energy_mWh", [1.0, -0.5])
-        _assert_col(df, "unix_time_s", [1700000000, 1700000010])
         _assert_col(df, "step_count", [1, 2])
 
 
 class TestReadNda3:
-    """NdaData3 (file versions 3, 4): identifier in {0, 85}, header offset 32."""
+    """NDA file version 3, 4."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
@@ -320,7 +401,7 @@ class TestReadNda3:
                 "capacity_mAh": [1800000, 900000],
             },
         )
-        header = _header_offset_preamble(pos_offset=32, main_begin=36)
+        header = _nda_1_29_header(main_begin=114, current_range=10)
         mm = _make_mmap(header + data)
 
         df = nda._read_nda_3(mm)
@@ -335,7 +416,7 @@ class TestReadNda3:
 
 
 class TestReadNda5:
-    """NdaData5 (file versions 5-8): magic-byte header search, mask 0."""
+    """NDA file version 5-8."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
@@ -375,7 +456,7 @@ class TestReadNda5:
                 "unix_time_s": [1700000000, 1700000010],
             },
         )
-        mm = _make_mmap(self.SENTINEL + data)
+        mm = _make_mmap(_nda_1_29_header(main_begin=114, current_range=10) + self.SENTINEL + data)
 
         df = nda._read_nda_5(mm)
 
@@ -403,7 +484,7 @@ class TestReadNda5:
             "step_time_s": 10,
         }
         data = _build_rows(self.LAYOUT, defaults, columns=columns)
-        mm = _make_mmap(self.SENTINEL + data)
+        mm = _make_mmap(_nda_1_29_header(main_begin=114, current_range=10) + self.SENTINEL + data)
 
         df = nda._read_nda_5(mm)
 
@@ -416,7 +497,7 @@ class TestReadNda5:
 
 
 class TestReadNda9:
-    """NdaData9 (file version 9): identifier must be exactly 85, header offset 32."""
+    """NDA file version 9."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
@@ -453,7 +534,7 @@ class TestReadNda9:
                 "unix_time_s": [1700000000, 1700000010],
             },
         )
-        header = _header_offset_preamble(pos_offset=32, main_begin=36)
+        header = _nda_1_29_header(main_begin=114, current_range=10)
         mm = _make_mmap(header + data)
 
         df = nda._read_nda_9(mm)
@@ -469,7 +550,7 @@ class TestReadNda9:
 
 
 class TestReadNda10:
-    """NdaData10 (file version 10): step_time_s is u8 in ms (/1000), header offset 32."""
+    """NDA file version 10."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
@@ -498,7 +579,7 @@ class TestReadNda10:
                 "index": [1, 2],
                 "step_index": [1, 2],
                 "step_type": [1, 2],
-                "step_time_s": [10000, 20000],
+                "step_time_s": [10, 20],
                 "voltage_V": [36000, 35000],
                 "current_mA": [200000, -150000],
                 "capacity_mAh": [1800000, 900000],
@@ -506,7 +587,7 @@ class TestReadNda10:
                 "unix_time_s": [1700000000, 1700000010],
             },
         )
-        header = _header_offset_preamble(pos_offset=32, main_begin=36)
+        header = _nda_1_29_header(main_begin=114, current_range=10)
         mm = _make_mmap(header + data)
 
         df = nda._read_nda_10(mm)
@@ -522,12 +603,7 @@ class TestReadNda10:
 
 
 class TestReadNda11:
-    """NdaData11 (file versions 11, 12, 13, 15, 18): range-based multiplier, signed net capacity/energy.
-
-    Version 11 itself uses header offset 32; versions 12/13/15/18 use offset
-    64 - _read_nda_11 picks between them by reading mm[14] directly, so the
-    main test exercises the version==11 path explicitly.
-    """
+    """NDA file versions 11, 12, 13, 15, 18."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
@@ -566,7 +642,7 @@ class TestReadNda11:
                 "unix_time_s": [1700000000, 1700000010],
             },
         )
-        header = _header_offset_preamble(pos_offset=32, main_begin=36, version_byte=11)
+        header = _header_offset_preamble(pos_offset=64, main_begin=72, version_byte=11)
         mm = _make_mmap(header + data)
 
         df = nda._read_nda_11(mm)
@@ -580,8 +656,36 @@ class TestReadNda11:
         _assert_col(df, "unix_time_s", [1700000000, 1700000010])
         _assert_col(df, "step_count", [1, 2])
 
-    def test_version_12_uses_offset_64_header(self) -> None:
-        """Versions sharing this struct other than 11 use the unified header at offset 64."""
+    def test_record_range_beats_header_range(self) -> None:
+        """A non-zero range in the record wins over the fixed range in the header."""
+        data = _build_rows(
+            self.LAYOUT,
+            self.DEFAULTS,  # range=100 -> multiplier 1e-2
+            columns={"index": [1], "step_index": [1], "step_type": [1], "current_mA": [20000]},
+        )
+        # header range 10 -> multiplier 1e-3, which the record range should override
+        mm = _make_mmap(_nda_1_29_header(main_begin=114, current_range=10) + data)
+
+        df = nda._read_nda_11(mm)
+
+        _assert_col(df, "current_mA", [200.0])
+
+    def test_zero_record_range_falls_back_to_header_range(self) -> None:
+        """A zero range in the record means unset, so the fixed header range applies."""
+        data = _build_rows(
+            self.LAYOUT,
+            {**self.DEFAULTS, "range": 0},
+            columns={"index": [1], "step_index": [1], "step_type": [1], "current_mA": [20000]},
+        )
+        # header range 10 -> multiplier 1e-3
+        mm = _make_mmap(_nda_1_29_header(main_begin=114, current_range=10) + data)
+
+        df = nda._read_nda_11(mm)
+
+        _assert_col(df, "current_mA", [20.0])
+
+    def test_file_version_does_not_change_header_offset(self) -> None:
+        """Every file version sharing this struct reads the same header offset."""
         data = _build_rows(
             self.LAYOUT,
             self.DEFAULTS,
@@ -594,7 +698,7 @@ class TestReadNda11:
                 "capacity_mAh": [180000],
             },
         )
-        header = _header_offset_preamble(pos_offset=64, main_begin=68, version_byte=12)
+        header = _header_offset_preamble(pos_offset=64, main_begin=72, version_byte=12)
         mm = _make_mmap(header + data)
 
         df = nda._read_nda_11(mm)
@@ -613,7 +717,7 @@ class TestReadNda11:
             "energy_mWh": 360000,
             "step_time_s": 10000,
         }
-        header = _header_offset_preamble(pos_offset=32, main_begin=36, version_byte=11)
+        header = _header_offset_preamble(pos_offset=64, main_begin=72, version_byte=11)
         data = _build_rows(self.LAYOUT, defaults, columns=columns)
         mm = _make_mmap(header + data)
 
@@ -627,7 +731,7 @@ class TestReadNda11:
 
 
 class TestReadNda14:
-    """NdaData14 (file versions 14, 16, 17, 20, 22, 23, 24): magic-byte header, split charge/discharge."""
+    """NDA file versions 14, 16, 17, 20, 22, 23, 24."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
@@ -661,6 +765,7 @@ class TestReadNda14:
             columns={
                 "index": [1, 2],
                 "step_index": [1, 2],
+                "step_count": [113, 0],
                 "step_type": [1, 2],
                 "step_time_s": [10000, 20000],
                 "voltage_V": [36000, 35000],
@@ -689,7 +794,7 @@ class TestReadNda14:
 
 
 class TestReadNda19:
-    """NdaData19 (file version 19): no range field, split charge/discharge in mA*s (/3600)."""
+    """NDA file version 19."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
@@ -727,14 +832,14 @@ class TestReadNda19:
                 "step_time_s": [10, 20],
                 "voltage_V": [36000, 35000],
                 "current_mA": [200000, -150000],
-                "charge_capacity_mAh": [1800, 0],
-                "discharge_capacity_mAh": [0, 900],
-                "charge_energy_mWh": [3600, 0],
-                "discharge_energy_mWh": [0, 1800],
+                "charge_capacity_mAh": [1800000, 0],
+                "discharge_capacity_mAh": [0, 900000],
+                "charge_energy_mWh": [3600000, 0],
+                "discharge_energy_mWh": [0, 1800000],
                 "unix_time_s": [1700000000, 1700000010],
             },
         )
-        header = _header_offset_preamble(pos_offset=64, main_begin=68)
+        header = _nda_1_29_header(main_begin=114, current_range=10)
         mm = _make_mmap(header + data)
 
         df = nda._read_nda_19(mm)
@@ -752,7 +857,7 @@ class TestReadNda19:
 
 
 class TestReadNda25:
-    """NdaData25 (file versions 25, 27): range multiplier, signed net capacity/energy, header offset 32."""
+    """NDA file versions 25, 27."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
@@ -791,7 +896,7 @@ class TestReadNda25:
                 "unix_time_s": [1700000000, 1700000010],
             },
         )
-        header = _header_offset_preamble(pos_offset=32, main_begin=36)
+        header = _header_offset_preamble(pos_offset=64, main_begin=72)
         mm = _make_mmap(header + data)
 
         df = nda._read_nda_25(mm)
@@ -807,7 +912,7 @@ class TestReadNda25:
 
 
 class TestReadNda29:
-    """NdaData29 (file versions 26, 28, 29): magic-byte header (identifier=85 itself), Y/M/D/h/m/s timestamp."""
+    """NDA file versions 26, 28, 29."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
@@ -886,7 +991,7 @@ class TestReadNda29:
 
 
 class TestReadNda129:
-    """DFDATA_9021 (file version 129, deprecated by Neware): 64-bit header offset 82, direct floats."""
+    """NDA file version 129."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u1"),
@@ -939,7 +1044,7 @@ class TestReadNda129:
                 "unix_time_s": [1_700_000_000_000_000, 1_700_000_010_000_000],  # microseconds
             },
         )
-        header = _header_offset_preamble(pos_offset=82, main_begin=90, pos64=True)
+        header = _header_offset_preamble(pos_offset=82, main_begin=98, pos64=True)
         mm = _make_mmap(header + data)
 
         df = nda._read_nda_129(mm)
@@ -957,7 +1062,7 @@ class TestReadNda129:
 
 
 class TestReadNda13090:
-    """NDA 130, BTS9.0 sub-format: magic-byte header search, raw floats already signed."""
+    """NDA file version 130, BTS9.0 sub-format."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("_pad1", "V4"),
@@ -1020,7 +1125,7 @@ class TestReadNda13090:
 
 
 class TestReadNda13091:
-    """NDA 130, BTS9.1 sub-format: fixed offset 1024, self-describing record length."""
+    """NDA file version 130, BTS9.1 sub-format NDA."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u2"),
@@ -1095,14 +1200,13 @@ class TestUnverifiedFormatWarning:
 
     def test_warns_for_unverified_version(self) -> None:
         """nda_version 1 (no real data) emits UnverifiedFormatWarning."""
-        header = bytearray(_header_offset_preamble(pos_offset=32, main_begin=36))
-        header[0:6] = b"NEWARE"
-        header[14] = 1  # nda_version
+        header = _nda_1_29_header(main_begin=114, current_range=6000, version_byte=1)
         record = _build_rows(
             TestReadNda1.LAYOUT,
             TestReadNda1.DEFAULTS,
             columns={
                 "index": [1],
+                "cycle_count": [0],
                 "step_index": [1],
                 "step_type": [1],
                 "step_time_s": [10],
@@ -1111,7 +1215,7 @@ class TestUnverifiedFormatWarning:
                 "capacity_mAh": [1800000],
             },
         )
-        mm = _make_mmap(bytes(header) + record)
+        mm = _make_mmap(header + record)
 
         with pytest.warns(nda.UnverifiedFormatWarning, match="nda_version 1 "):
             df = nda._read_nda(mm)

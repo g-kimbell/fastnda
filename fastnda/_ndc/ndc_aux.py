@@ -8,6 +8,7 @@ import numpy as np
 import polars as pl
 
 from fastnda._ndc.ndc_utils import bytes_to_df
+from fastnda.utils import _drop_empty
 
 
 def read_ndc_aux_2(buf: bytes) -> pl.DataFrame:
@@ -29,13 +30,7 @@ def read_ndc_aux_2(buf: bytes) -> pl.DataFrame:
         pl.col("temperature_degC").cast(pl.Float32) * 0.1,
         pl.col("temperature_setpoint_degC").cast(pl.Float32) * 0.1,
     )
-    # Drop empty columns
-    cols_to_drop = [
-        col
-        for col in ["voltage_V", "temperature_degC", "temperature_setpoint_degC"]
-        if df.filter(pl.col(col) != 0).is_empty()
-    ]
-    return df.select(pl.exclude(cols_to_drop))
+    return _drop_empty(df, ["voltage_V", "temperature_degC", "temperature_setpoint_degC"])
 
 
 def read_ndc_aux_5(buf: bytes) -> pl.DataFrame:
@@ -56,13 +51,7 @@ def read_ndc_aux_5(buf: bytes) -> pl.DataFrame:
         pl.col("temperature_degC").cast(pl.Float32) * 0.1,
         pl.col("temperature_setpoint_degC").cast(pl.Float32) * 0.1,
     )
-    # Drop empty columns
-    cols_to_drop = [
-        col
-        for col in ["voltage_V", "temperature_degC", "temperature_setpoint_degC"]
-        if df.filter(pl.col(col) != 0).is_empty()
-    ]
-    return df.select(pl.exclude(cols_to_drop))
+    return _drop_empty(df, ["voltage_V", "temperature_degC", "temperature_setpoint_degC"])
 
 
 def read_ndc_aux_6(buf: bytes) -> pl.DataFrame:
@@ -96,9 +85,7 @@ def read_ndc_aux_11(buf: bytes) -> pl.DataFrame:
                 pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("index"),
             ]
         )
-        # Drop empty columns
-        cols_to_drop = [col for col in ["voltage_V", "temperature_degC"] if df.filter(pl.col(col) != 0).is_empty()]
-        return df.select(pl.exclude(cols_to_drop))
+        return _drop_empty(df, ["voltage_V", "temperature_degC"])
 
     if identifier == b"\x74":
         dtype = np.dtype(
@@ -142,8 +129,6 @@ def read_ndc_aux_16(buf: bytes) -> pl.DataFrame:
                 pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("index"),
             ]
         )
-        # Drop empty columns
-        cols_to_drop = [col for col in ["voltage_V", "temperature_degC"] if df.filter(pl.col(col) != 0).is_empty()]
-        return df.select(pl.exclude(cols_to_drop))
+        return _drop_empty(df, ["voltage_V", "temperature_degC"])
     msg = "Unknown file structure for ndc version 16 filetype 5."
     raise NotImplementedError(msg)

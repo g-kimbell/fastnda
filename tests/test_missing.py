@@ -10,7 +10,6 @@ from fastnda._ndc import read_ndc
 from fastnda._ndc.ndc_aux import read_ndc_aux_11, read_ndc_aux_16
 from fastnda.nda import (
     _decode_datetime_us,
-    _read_nda_5,
     _read_nda_29,
     _read_nda_130_metadata,
     _read_nda_130_test_info,
@@ -52,8 +51,6 @@ class TestMissing:
             mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
         with pytest.raises(EOFError):
             _read_nda_29(mm)
-        with pytest.raises(EOFError):
-            _read_nda_5(mm)
 
     def test_missing_test_info(self) -> None:
         """Zeroed test info pointers give empty metadata."""

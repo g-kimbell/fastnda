@@ -57,9 +57,23 @@ def _generate_cycle_number(
     )
 
 
-def _count_changes(series: pl.Expr) -> pl.Expr:
-    """Enumerate the number of value changes in a series."""
-    return series.diff().fill_null(1).abs().gt(0).cum_sum()
+def _step_sign(step_type: pl.Expr, current_col: pl.Expr) -> pl.Expr:
+    """Sign of capacity/energy from step type.
+
+    Falls back to the current sign for step types not in CHARGE_DISCHARGE_MAP.
+    """
+    return (step_type.replace_strict(CHARGE_DISCHARGE_MAP, default=None) * 2 - 1).fill_null(current_col.sign())
+
+
+def _count_changes(*series: pl.Expr) -> pl.Expr:
+    """Enumerate the number of value changes across one or more series.
+
+    A row counts as a change if any of the given series changes value there.
+    """
+    changed = series[0].diff().fill_null(1).abs().gt(0)
+    for s in series[1:]:
+        changed = changed | s.diff().fill_null(1).abs().gt(0)
+    return changed.cum_sum()
 
 
 def _id_first_state(df: pl.DataFrame) -> Literal["chg", "dchg"]:
@@ -92,6 +106,30 @@ def _range_to_mult(series: pl.Expr) -> pl.Expr:
             .otherwise(1e-1)
         )
     )  # fmt: skip
+
+
+def _add_total_time(df: pl.DataFrame) -> pl.DataFrame:
+    """Add total_time_s from step_time_s."""
+    max_df = (
+        df.group_by("step_count")
+        .agg(pl.col("step_time_s").max().cast(pl.Float64).alias("_prev_steps_s"))
+        .sort("step_count")
+        .with_columns(pl.col("_prev_steps_s").shift(1).fill_null(0).cum_sum())
+    )
+    return (
+        df.join(max_df, on="step_count", how="left")
+        .with_columns((pl.col("step_time_s") + pl.col("_prev_steps_s")).alias("total_time_s"))
+        .drop("_prev_steps_s")
+    )
+
+
+def _drop_empty(df: pl.DataFrame, cols: list[str] | None) -> pl.DataFrame:
+    """Drop empty columns."""
+    # Drop empty columns
+    if cols is None:
+        cols = df.columns
+    cols_to_drop = [c for c in cols if df.filter(pl.col(c) != 0).is_empty()]
+    return df.select(pl.exclude(cols_to_drop))
 
 
 class UnverifiedFormatWarning(UserWarning):
