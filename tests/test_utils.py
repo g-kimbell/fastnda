@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 from polars.testing import assert_series_equal
 
-from fastnda.utils import _count_changes, _generate_cycle_number, _id_first_state
+from fastnda.utils import _count_changes, _drop_empty, _generate_cycle_number, _id_first_state
 
 
 class TestUtils:
@@ -119,3 +119,15 @@ class TestUtils:
         caplog.clear()
         _generate_cycle_number(pl.DataFrame({"step_type": [1, 1, 1, 1, 25, 2, 2]}), cycle_mode="dchg")
         assert "Data contains Pulse, SIM, or Ramp steps" in caplog.text
+
+    def test_drop_empty_selected_columns(self) -> None:
+        """Only the named columns are considered for dropping."""
+        df = pl.DataFrame({"a": [0, 0, 0], "b": [0, 1, 0], "c": [0, 0, 0]})
+        assert _drop_empty(df, ["a", "b"]).columns == ["b", "c"]
+
+    def test_drop_empty_all_columns(self) -> None:
+        """Passing None checks every column."""
+        df = pl.DataFrame({"a": [0, 0, 0], "b": [0, 1, 0], "c": [0, 0, 0]})
+        assert _drop_empty(df, None).columns == ["b"]
+        df = pl.DataFrame({"a": [0.0, 0.0], "b": [0.0, -0.5]})
+        assert _drop_empty(df, None).columns == ["b"]
