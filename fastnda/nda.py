@@ -458,15 +458,6 @@ def _nda_head_main(mm: mmap.mmap, *, pos_offset: int = 64, pos64: bool = False) 
     return begin, length
 
 
-def _bts9_data_block(mm: mmap.mmap) -> tuple[int, int]:
-    """Read the {begin, length} pointer to the main data block of a BTS9 file."""
-    begin, length = _nda_head_main(mm, pos_offset=82, pos64=True)
-    if begin == 0 and mm[1024:1030] == b"NEWARE":
-        # Can be a second header block shifted by 1024 bytes
-        begin, _ = _nda_head_main(mm, pos_offset=1024 + 82, pos64=True)
-    return begin, length
-
-
 def _nda_multiplier(mm: mmap.mmap, record_range: pl.Expr | None = None) -> pl.Expr:
     """Multiplier applied to current, capacity and energy. Fixed with optional per-row range."""
     block_begin = int.from_bytes(mm[16:20], "little")
