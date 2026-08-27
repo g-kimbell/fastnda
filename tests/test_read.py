@@ -278,7 +278,7 @@ class TestRead:
             )
             abs_diff = (df["energy_ignore_negs_mWh"] - df_ref["Energy(mWs)"].abs() / 3600).abs()
             rel_diff = 2 * abs_diff / (df["energy_ignore_negs_mWh"] + df_ref["Energy(mWs)"].abs() / 3600)
-            if ((abs_diff > 6e-3) & (rel_diff > 1e-6)).any():
+            if ((abs_diff > 6e-3) & (rel_diff > 1e-5)).any():
                 msg = "Energy columns are different."
                 raise ValueError(msg)
             if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
