@@ -1054,6 +1054,59 @@ class TestReadNda129:
         _assert_col(df, "unix_time_s", [1700000000.0, 1700000010.0])
         _assert_col(df, "step_count", [1, 2])
 
+    def test_single_record_block(self) -> None:
+        """A block with one record uses block length as record length."""
+        data = _build_rows(self.LAYOUT, self.DEFAULTS, columns={"index": [1], "step_index": [1], "step_type": [1]})
+        header = _header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True)
+        mm = _make_mmap(header + data)
+
+        df = nda._read_nda_129(mm)
+
+        _assert_col(df, "index", [1])
+
+    def test_record_len_ignores_bytes_after_the_block(self) -> None:
+        """Searching for record length does not catch bytes in surrounding data/metadata that might match."""
+        data = _build_rows(self.LAYOUT, self.DEFAULTS, columns={"index": [1], "step_index": [1], "step_type": [1]})
+        header = _header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True)
+        trailing = bytes(40) + bytes(4) + bytes([85]) + bytes(100)
+        mm = _make_mmap(header + data + trailing)
+
+        df = nda._read_nda_129(mm)
+
+        _assert_col(df, "index", [1])
+
+    def test_reads_every_block(self) -> None:
+        """Larger files concatenate multiple blocks."""
+        first = _build_rows(self.LAYOUT, self.DEFAULTS, columns={"index": [1, 2], "step_index": [1, 1]})
+        second = _build_rows(self.LAYOUT, self.DEFAULTS, columns={"index": [3, 4, 5], "step_index": [1, 1, 1]})
+
+        def _section_header(main_begin: int, main_len: int, foot_end: int) -> bytearray:
+            buf = bytearray(1024)
+            buf[0:6] = b"NEWARE"
+            buf[82:90] = main_begin.to_bytes(8, "little")
+            buf[90:98] = main_len.to_bytes(8, "little")
+            # The last pointer of a header ends on the next header, or  EOF
+            buf[242:250] = foot_end.to_bytes(8, "little")
+            return buf
+
+        second_head = 2048 + len(first)
+        # The second block does not sit on the first block's record grid
+        second_begin = second_head + 1024
+        eof = second_begin + len(second)
+        summary = bytearray(1024)
+        summary[0:6] = b"NEWARE"
+        summary[90:98] = (len(first) + len(second)).to_bytes(8, "little")
+        buf = summary + _section_header(2048, len(first), second_head) + first
+        buf += _section_header(second_begin, len(second), eof) + second
+        mm = _make_mmap(bytes(buf))
+
+        assert nda._bts9_data_blocks(mm) == [(2048, len(first)), (second_begin, len(second))]
+        assert (second_begin - 2048) % 88 != 0, "blocks should be misaligned to exercise per-block grids"
+
+        df = nda._read_nda_129(mm)
+
+        _assert_col(df, "index", [1, 2, 3, 4, 5])
+
 
 class TestReadNda13090:
     """NDA file version 130, BTS9.0 sub-format."""

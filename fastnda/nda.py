@@ -1093,10 +1093,76 @@ def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
 _BTS9_IDENTIFIER = 85
 
 
+def _bts9_data_blocks(mm: mmap.mmap) -> list[tuple[int, int]]:
+    """Read the {begin, length} pointers to every data block of a BTS9 file.
+
+    Most files hold a single block, some files have multiple blocks each with
+    its own 1024-byte NEWARE header.
+    """
+    begin, total_length = _nda_head_main(mm, pos_offset=82, pos64=True)
+    if begin != 0 or mm[1024:1030] != b"NEWARE":
+        return [(begin, total_length)]
+    # A header with no begin summarises all blocks
+    blocks: list[tuple[int, int]] = []
+    head = 1024
+    seen: set[int] = set()
+    while head not in seen and mm[head : head + 6] == b"NEWARE":
+        seen.add(head)
+        block_begin, block_length = _nda_head_main(mm, pos_offset=head + 82, pos64=True)
+        if block_length:
+            blocks.append((block_begin, block_length))
+        # A header's last pointer ends on the next header or EOF
+        foot_begin, foot_length = _nda_head_main(mm, pos_offset=head + 242, pos64=True)
+        head = foot_begin + foot_length
+    chained_length = sum(length for _, length in blocks)
+    if chained_length != total_length:
+        warnings.warn(
+            f"BTS9 section chain covers {chained_length} bytes but the header reports "
+            f"{total_length} - some records may be missing.",
+            UnverifiedFormatWarning,
+            stacklevel=2,
+        )
+    return blocks
+
+
+def _bts9_record_len(mm: mmap.mmap, blocks: list[tuple[int, int]]) -> int:
+    """Guess the BTS9.0 record length, which is not recorded in the header."""
+    begin, first_len = blocks[0]
+    block_end = begin + first_len if first_len else len(mm)
+    # Records open with a constant 4-byte tag (maybe device type?) followed by an identifier
+    tag = mm[begin : begin + 4] + bytes([_BTS9_IDENTIFIER])
+    next_record = mm.find(tag, begin + 1, block_end)
+    # If no next record, it is one record
+    record_len = next_record - begin if next_record != -1 else block_end - begin
+    if record_len <= 0:
+        msg = f"Could not find a BTS9.0 record at {begin}."
+        raise EOFError(msg)
+    # Correct length should integer divide every data block
+    if any(length % record_len for _, length in blocks):
+        msg = f"BTS9.0 record length {record_len} does not divide every data block."
+        raise ValueError(msg)
+    return record_len
+
+
+def _df_from_blocks(
+    mm: mmap.mmap,
+    blocks: list[tuple[int, int]],
+    record_len: int,
+    dtype: np.dtype,
+    mask: int,
+) -> pl.DataFrame:
+    """Merge data block arrays into one dataframe, concat in polars for speed."""
+    dfs = [
+        _mask_arr(_get_arr_from_nda(mm, header=begin, record_len=record_len, data_len=length), dtype, mask)
+        for begin, length in blocks
+    ]
+    return pl.concat(dfs, how="vertical", rechunk=False)
+
+
 def _read_nda_129(mm: mmap.mmap) -> pl.DataFrame:
-    """Read the 88-byte record block shared by nda 129 and nda 130 BTS9.0."""
-    begin, length = _bts9_data_block(mm)
-    arr = _get_arr_from_nda(mm, header=begin, record_len=88, data_len=length)
+    """Read the data blocks shared by nda 129 and nda 130 BTS9.0."""
+    blocks = _bts9_data_blocks(mm)
+    record_len = _bts9_record_len(mm, blocks)
     dtype = np.dtype(
         [
             ("_pad1", "V4"),  # btDevType, btDevID, btUnitID, btChlID
@@ -1116,13 +1182,13 @@ def _read_nda_129(mm: mmap.mmap) -> pl.DataFrame:
             ("discharge_capacity_mAh", "<f4"),  # mA.s
             ("discharge_energy_mWh", "<f4"),  # mW.s
             ("unix_time_s", "<u8"),  # microseconds
-            ("_pad6", "V12"),  # dwCurStepRange, dwLogCode, dwCRC32
+            ("_pad6", f"V{record_len - 76}"),  # dwCurStepRange, dwLogCode, dwCRC32
         ]
     )
     # Files may or may not put a negative sign on discharge
     # abs those cols and let main calculate net capacity/energy
     mult_cols = ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"]
-    return _mask_arr(arr, dtype, _BTS9_IDENTIFIER).with_columns(
+    return _df_from_blocks(mm, blocks, record_len, dtype, _BTS9_IDENTIFIER).with_columns(
         [
             pl.col(mult_cols).abs() / 3600,
             (pl.col("unix_time_s").cast(pl.Float64) / 1e6).alias("unix_time_s"),
@@ -1134,7 +1200,7 @@ def _read_nda_129(mm: mmap.mmap) -> pl.DataFrame:
 
 def _read_nda_130(mm: mmap.mmap) -> pl.DataFrame:
     """Figure out whether BTS9.0 or BTS9.1 and pass to correct function."""
-    begin, _length = _bts9_data_block(mm)
+    begin = _bts9_data_blocks(mm)[0][0]
     # Both carry identifier 85, at byte 4 of a BTS9.0 record and byte 0 of a BTS9.1 record
     if mm[begin + 4] == _BTS9_IDENTIFIER:
         return _read_nda_129(mm)
@@ -1147,12 +1213,11 @@ def _read_nda_130(mm: mmap.mmap) -> pl.DataFrame:
 def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
     """Read nda version 130 BTS9.1."""
     # Search forward from the first record for the next identifier to get the record length
-    begin, length = _bts9_data_block(mm)
+    blocks = _bts9_data_blocks(mm)
+    begin = blocks[0][0]
     identifier_bytes = mm[begin : begin + 2]
     identifier_int = int.from_bytes(identifier_bytes, byteorder="little", signed=False)
     record_len = mm.find(identifier_bytes, begin + 2) - begin
-
-    arr = _get_arr_from_nda(mm, begin, record_len, data_len=length)
 
     # In BTS9.1, data and aux are in the same rows
     dtype_list = [
@@ -1178,7 +1243,7 @@ def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
         dtype_list.append(("_pad4", f"V{record_len - 56}"))
     data_dtype = np.dtype(dtype_list)
 
-    data_df = _mask_arr(arr, data_dtype, identifier_int).with_columns(
+    data_df = _df_from_blocks(mm, blocks, record_len, data_dtype, identifier_int).with_columns(
         [
             pl.col("capacity_mAs").clip(lower_bound=0).alias("charge_capacity_mAh") / 3600,
             pl.col("capacity_mAs").clip(upper_bound=0).abs().alias("discharge_capacity_mAh") / 3600,
