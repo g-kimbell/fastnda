@@ -147,7 +147,7 @@ def _add_derived_unix_time(df: pl.DataFrame, start_time_s: float | None) -> pl.D
 def _read_nda_version_info(mm: mmap.mmap) -> dict[str, str]:
     """Read BTS server/client version strings, if present near the start of the file."""
     metadata: dict[str, str] = {}
-    version_loc = mm.find(b"BTSServer")
+    version_loc = mm.find(b"BTSServer", 0, 65536)
     if version_loc != -1:
         mm.seek(version_loc)
         metadata["server_version"] = mm.read(50).strip(b"\x00").decode()
