@@ -1,6 +1,7 @@
 # Copyright © 2026, Empa.
 """Ensure functions behave for missing/unknown files."""
 
+import datetime
 import mmap
 from pathlib import Path
 
@@ -11,8 +12,10 @@ from fastnda._ndc.ndc_aux import read_ndc_aux_11, read_ndc_aux_16
 from fastnda.nda import _read_nda_29, read_nda
 from fastnda.nda_meta import (
     _decode_datetime_us,
+    _find_version_pstring,
     _read_bts9_metadata,
     _read_bts9_test_info,
+    _read_fields,
     _read_nda_test_info,
     _read_pack_test_info_chain,
     _read_pack_test_info_new,
@@ -68,6 +71,28 @@ class TestMissing:
         """A record with no start/stop timestamp pair gives empty metadata."""
         assert _read_pack_test_info_old(bytes(512)) == {}
         assert _read_pack_test_info_new(bytes(512)) == {}
+
+    def test_read_fields_out_of_range(self) -> None:
+        """Fields reaching past the record, past the limit, or before its start are skipped."""
+        assert _read_fields(bytes(3), {"test_id": (0, "u32")}) == {}
+        assert _read_fields(bytes(8), {"test_id": (0, "u32")}, limit=2) == {}
+        assert _read_fields(bytes(8), {"test_id": (0, "u32")}, base=-4) == {}
+
+    def test_pack_test_info_old_no_version_string(self) -> None:
+        """A record with timestamps but no version string at either chain offset gives empty metadata."""
+        record = bytearray(512)
+        start = int(datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc).timestamp() * 1e6)
+        record[200:208] = start.to_bytes(8, "little")
+        record[208:216] = (start + 3600 * 1_000_000).to_bytes(8, "little")
+        assert _find_version_pstring(record) is None
+        assert _read_pack_test_info_old(bytes(record)) == {}
+
+        # a version string too far from the timestamps to be this record's chain
+        version = b"8.0.0.1.2"
+        record[300] = len(version)
+        record[301 : 301 + len(version)] = version
+        assert _find_version_pstring(record) == 300
+        assert _read_pack_test_info_old(bytes(record)) == {}
 
     def test_pack_test_info_chain_truncated(self) -> None:
         """A string chain running past the end of the record gives empty metadata."""
