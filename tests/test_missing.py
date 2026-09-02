@@ -8,14 +8,15 @@ import pytest
 
 from fastnda._ndc import read_ndc
 from fastnda._ndc.ndc_aux import read_ndc_aux_11, read_ndc_aux_16
-from fastnda.nda import (
+from fastnda.nda import _read_nda_29, read_nda
+from fastnda.nda_meta import (
     _decode_datetime_us,
-    _read_nda_29,
-    _read_nda_130_metadata,
-    _read_nda_130_test_info,
+    _read_bts9_metadata,
+    _read_bts9_test_info,
     _read_nda_test_info,
-    _read_pack_test_info_old_extension,
-    read_nda,
+    _read_pack_test_info_chain,
+    _read_pack_test_info_new,
+    _read_pack_test_info_old,
     read_nda_metadata,
 )
 
@@ -56,18 +57,23 @@ class TestMissing:
         """Zeroed test info pointers give empty metadata."""
         mm = mmap.mmap(-1, 2048)
         assert _read_nda_test_info(mm, 29) == {}
-        assert _read_nda_130_test_info(mm) == {}
+        assert _read_bts9_test_info(mm) == {}
 
     def test_decode_datetime_invalid(self) -> None:
         """Zero and out-of-range timestamps decode to None."""
         assert _decode_datetime_us(bytes(8)) is None
         assert _decode_datetime_us(b"\xff" * 8) is None
 
-    def test_pack_test_info_old_extension_truncated(self) -> None:
-        """Record too short for the pstring section gives empty metadata."""
-        assert _read_pack_test_info_old_extension(b"") == {}
+    def test_pack_test_info_no_timestamp_anchor(self) -> None:
+        """A record with no start/stop timestamp pair gives empty metadata."""
+        assert _read_pack_test_info_old(bytes(512)) == {}
+        assert _read_pack_test_info_new(bytes(512)) == {}
 
-    def test_nda_130_metadata_no_version_string(self) -> None:
+    def test_pack_test_info_chain_truncated(self) -> None:
+        """A string chain running past the end of the record gives empty metadata."""
+        assert _read_pack_test_info_chain(b"\x40abc", 0, counted=True) == {}
+
+    def test_bts9_metadata_no_version_string(self) -> None:
         """Header without a version string skips the BTS version field."""
-        metadata = _read_nda_130_metadata(mmap.mmap(-1, 2048))
+        metadata = _read_bts9_metadata(mmap.mmap(-1, 2048))
         assert "bts_version" not in metadata

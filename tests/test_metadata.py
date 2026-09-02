@@ -9,8 +9,8 @@ import pytest
 
 from fastnda import read_metadata
 
-# NDA 130 currently always warn about metadata reading
-pytestmark = pytest.mark.filterwarnings("ignore:read_metadata for NDA 130")
+# NDA 129/130 currently always warn about metadata reading
+pytestmark = pytest.mark.filterwarnings("ignore:read_metadata for NDA 129/130")
 
 
 def _read_metadata(test_file: Path) -> dict:
