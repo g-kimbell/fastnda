@@ -469,21 +469,49 @@ def _nda_multiplier(mm: mmap.mmap, record_range: pl.Expr | None = None) -> pl.Ex
     return _range_to_mult(record_range.replace(0, fixed_range))
 
 
+# Byte that cannot occur in an aux column name, used to split the pivot's output names
+_AUX_PIVOT_SEP = "\x00"
+
+
+def _aux_pivot_name(col: str, value_cols: list[str]) -> str:
+    """Name a pivoted aux column aux{channel}_{measurement}, e.g. aux1_voltage_V."""
+    # Polars names a pivot of one value column by the channel
+    # If there is more than one column, it names them name+sep+channel
+    if len(value_cols) == 1:
+        name, channel = value_cols[0], col
+    else:
+        name, _, channel = col.partition(_AUX_PIVOT_SEP)
+    return f"aux{channel}_{name.removeprefix('aux_')}"
+
+
+def _aux_column_order(channels: list[int], value_cols: list[str]) -> list[str]:
+    """Merge aux column names, grouped by channel then measurement."""
+    return [f"aux{channel}_{col.removeprefix('aux_')}" for channel in channels for col in value_cols]
+
+
 def _merge_aux(
     df: pl.DataFrame,
     aux_df: pl.DataFrame,
 ) -> pl.DataFrame:
     """Merge aux left into data, renaming columns if aux channel in data."""
-    if not aux_df.is_empty():
-        if "aux" in aux_df.columns:
-            aux_df = aux_df.unique(subset=["index", "aux"])
-            aux_df = aux_df.pivot(index="index", on="aux", separator="")
-            # Rename - add number to aux prefix e.g. aux1_voltage_volt
-            aux_df.columns = [f"aux{col[-1]}_{col[4:-1]}" if col != "index" else "index" for col in aux_df.columns]
-        else:
-            aux_df = aux_df.unique(subset=["index"])
-        return df.join(aux_df, on="index", how="left")
-    return df
+    if aux_df.is_empty():
+        return df
+    if "aux" not in aux_df.columns:
+        return df.join(aux_df.unique(subset=["index"]), on="index", how="left")
+    value_cols = [col for col in aux_df.columns if col not in {"index", "aux"}]
+    if not value_cols:
+        return df
+    channels = aux_df["aux"].unique().sort().to_list()
+    # Shortcut to a horizontal join if possible (pivot is slow)
+    if len(channels) == 1 and len(aux_df) == len(df) and aux_df["index"].equals(df["index"]):
+        names = dict(zip(value_cols, _aux_column_order(channels, value_cols), strict=True))
+        return pl.concat([df, aux_df.select(value_cols).rename(names)], how="horizontal")
+    # Full pivot and merge, slow but may be necessary
+    aux_df = aux_df.unique(subset=["index", "aux"])
+    aux_df = aux_df.pivot(index="index", on="aux", values=value_cols, separator=_AUX_PIVOT_SEP)
+    aux_df.columns = [col if col == "index" else _aux_pivot_name(col, value_cols) for col in aux_df.columns]
+    aux_df = aux_df.select("index", *_aux_column_order(channels, value_cols))
+    return df.join(aux_df, on="index", how="left")
 
 
 def _read_nda(mm: mmap.mmap) -> pl.DataFrame:
