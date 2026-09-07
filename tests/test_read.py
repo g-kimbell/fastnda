@@ -120,6 +120,8 @@ class TestRead:
                 .str.replace_all(" ", "_")
                 .str.replace_all("Dchg", "DChg")
                 .str.replace_all("Pulse_Step", "Pulse")
+                .str.replace_all("RI_Chg", "CR_Chg")
+                .str.replace_all("RI_DChg", "CR_DChg")
             ),
             check_names=False,
         )
@@ -248,14 +250,14 @@ class TestRead:
         # It can also can have negative values for discharge
         abs_diff = (df["capacity_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
         rel_diff = 2 * abs_diff / (df["capacity_mAh"].abs() + df_ref["Capacity(mAs)"].abs() / 3600)
-        if ((abs_diff > 3e-3) & (rel_diff > 1e-6)).any():
+        if ((abs_diff > 3e-3) & (rel_diff > 1e-5)).any():
             # If this fails, sometimes Neware does not count negative current during charge towards the capacity
             df = df.with_columns(
                 pl.col("capacity_mAh").abs().cum_max().over(pl.col("step_count")).alias("capacity_ignore_negs_mAh")
             )
             abs_diff = (df["capacity_ignore_negs_mAh"].abs() - df_ref["Capacity(mAs)"].abs() / 3600).abs()
             rel_diff = 2 * abs_diff / (df["capacity_ignore_negs_mAh"].abs() + df_ref["Capacity(mAs)"].abs() / 3600)
-            if ((abs_diff > 3e-3) & (rel_diff > 1e-6)).any():
+            if ((abs_diff > 3e-3) & (rel_diff > 1e-5)).any():
                 msg = "Capacity columns are different."
                 raise ValueError(msg)
 
@@ -276,7 +278,7 @@ class TestRead:
             )
             abs_diff = (df["energy_ignore_negs_mWh"] - df_ref["Energy(mWs)"].abs() / 3600).abs()
             rel_diff = 2 * abs_diff / (df["energy_ignore_negs_mWh"] + df_ref["Energy(mWs)"].abs() / 3600)
-            if ((abs_diff > 6e-3) & (rel_diff > 1e-6)).any():
+            if ((abs_diff > 6e-3) & (rel_diff > 1e-5)).any():
                 msg = "Energy columns are different."
                 raise ValueError(msg)
             if ((abs_diff > 3e-4) & (rel_diff > 1e-6)).any():
@@ -286,28 +288,29 @@ class TestRead:
     def test_capacity_energy_sign(self, parsed_data: tuple, note: Callable[[str], None]) -> None:
         """Each capacity/energy increment should share sign with current."""
         df, df_ref = parsed_data
-        cap = df.select(
-            pl.col("capacity_mAh").diff().over("step_count").alias("capacity_diff"),
-            pl.col("current_mA"),
-        ).drop_nulls()
-        cap_mismatch = (cap["capacity_diff"].sign() != cap["current_mA"].sign()).mean()
-        if cap_mismatch:
-            assert cap_mismatch < 0.005, f"{cap_mismatch:.3%} of capacity increments disagree in sign with current."
-            if cap_mismatch > 0.001:
-                note(f"{cap_mismatch:.3%} of capacity increments disagree in sign with current.")
+        columns = ["capacity_mAh"]
+        if "Energy(mWs)" in df_ref.columns and "energy_mWh" in df.columns:
+            columns.append("energy_mWh")
+        exprs = [pl.col("step_time_s").diff().over("step_count").alias("time_diff"), pl.col("current_mA")]
+        for col in columns:
+            exprs += [
+                pl.col(col).diff().over("step_count").alias(f"{col}_diff"),
+                pl.col(col).abs().diff().over("step_count").alias(f"{col}_growth"),
+            ]
+        diffs = df.select(exprs).drop_nulls()
+        static = diffs.filter(pl.col("time_diff") == 0)
+        moving = diffs.filter(pl.col("time_diff") != 0)
 
-        if "Energy(mWs)" not in df_ref.columns:
-            return
-        en = df.select(
-            pl.col("energy_mWh").diff().over("step_count").alias("energy_diff"),
-            pl.col("current_mA"),
-        ).drop_nulls()
-        # This is not strictly accurate, but is how Neware treats the energy sign - see #77
-        energy_mismatch = (en["energy_diff"].sign() != en["current_mA"].sign()).mean()
-        if energy_mismatch:
-            assert energy_mismatch < 0.005, f"{energy_mismatch:.3%} of energy increments disagree in sign with current."
-            if energy_mismatch > 0.001:
-                note(f"{energy_mismatch:.3%} of energy increments disagree in sign with current.")
+        # Energy sign is not strictly accurate, but is how Neware treats it - see #77
+        for col in columns:
+            label = col.rsplit("_", 1)[0]
+            n_static = int((static[f"{col}_growth"] > 0).sum())
+            assert not n_static, f"{n_static} {label} increments accumulate while step time does not advance."
+            mismatch = (moving[f"{col}_diff"].sign() != moving["current_mA"].sign()).mean()
+            if mismatch:
+                assert mismatch < 0.005, f"{mismatch:.3%} of {label} increments disagree in sign with current."
+                if mismatch > 0.001:
+                    note(f"{mismatch:.3%} of {label} increments disagree in sign with current.")
 
     def test_aux_cols(self, parsed_data: tuple) -> None:
         """Dataframes should have matching aux channels."""

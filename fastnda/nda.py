@@ -4,7 +4,6 @@
 import datetime
 import logging
 import mmap
-import re
 import warnings
 from collections.abc import Callable
 from contextlib import suppress
@@ -13,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
+from fastnda.nda_meta import _read_nda_test_info
 from fastnda.utils import (
     UnverifiedFormatWarning,
     _add_total_time,
@@ -49,74 +49,6 @@ def read_nda(file: str | Path) -> pl.DataFrame:
     return df.sort(by="index")
 
 
-# Active mass in ug is stored at a fixed offset in the 2048-byte NDA header
-# It is separate to the test info records, which have relative positions
-# Tuple is (minimum version, byte osset)
-_ACTIVE_MASS_OFFSETS: list[tuple[int, int]] = [
-    (130, 330),
-    (9, 152),
-    (8, 144),
-    (1, 80),
-]
-
-
-def _nda_active_mass_mg(mm: mmap.mmap, nda_version: int) -> float:
-    """Read active material mass (mg) from the NDA header, for an nda_version 1-29 file."""
-    offset = next(off for min_ver, off in _ACTIVE_MASS_OFFSETS if nda_version >= min_ver)
-    return int.from_bytes(mm[offset : offset + 4], "little") / 1000
-
-
-# Field name: (byte offset, byte length), relative to the start of the test info record
-_TEST_INFO_FIELDS_V1: dict[str, tuple[int, int]] = {
-    "start_time": (36, 20),
-    "creator": (76, 15),
-    "sn": (91, 20),
-    "remarks": (111, 100),
-}
-_TEST_INFO_FIELDS_V11 = {
-    **_TEST_INFO_FIELDS_V1,
-    "start_time": (37, 20),
-    "creator": (77, 60),
-    "sn": (137, 90),
-    "remarks": (227, 100),
-}
-_TEST_INFO_FIELDS_V17 = {**_TEST_INFO_FIELDS_V11, "barcode": (343, 40)}
-_TEST_INFO_FIELDS_V29 = {**_TEST_INFO_FIELDS_V17, "test_name": (383, 60), "step_name": (443, 60)}
-
-# (minimum version, test info record size in bytes, field layout for that record)
-_TEST_INFO_LAYOUTS: list[tuple[int, int, dict[str, tuple[int, int]]]] = [
-    (29, 503, _TEST_INFO_FIELDS_V29),
-    (17, 383, _TEST_INFO_FIELDS_V17),
-    (16, 343, _TEST_INFO_FIELDS_V11),  # v16 adds a 'parallel channel' field, offsets unaffected
-    (11, 327, _TEST_INFO_FIELDS_V11),
-    (1, 211, _TEST_INFO_FIELDS_V1),
-]
-
-
-def _read_nda_test_info(mm: mmap.mmap, nda_version: int) -> dict[str, str]:
-    """Read the test info record from an nda_version 1-29 file.
-
-    The header stores the test info begin byte and length at fixed offsets 24/28.
-    The test info record struct changes with file version.
-    Uses last test info record found.
-    """
-    struct_size, fields = next((size, f) for min_ver, size, f in _TEST_INFO_LAYOUTS if nda_version >= min_ver)
-
-    test_begin = int.from_bytes(mm[24:28], "little")
-    test_len = int.from_bytes(mm[28:32], "little")
-    count = test_len // struct_size if test_begin and test_len else 0
-    if count == 0:
-        return {}
-    record_offset = test_begin + (count - 1) * struct_size
-    record = mm[record_offset : record_offset + struct_size]
-
-    # Fixed-size null-terminated C strings, only return up to the first null, after that is garbled
-    return {
-        name: record[offset : offset + length].split(b"\x00", 1)[0].decode("gb2312", errors="ignore").strip()
-        for name, (offset, length) in fields.items()
-    }
-
-
 _START_TIME_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y.%m.%d %H:%M:%S")
 
 
@@ -142,266 +74,6 @@ def _add_derived_unix_time(df: pl.DataFrame, start_time_s: float | None) -> pl.D
         logger.info("No test start time found, cannot derive unix_time_s.")
         return df
     return df.with_columns((pl.col("total_time_s") + start_time_s).alias("unix_time_s"))
-
-
-def _read_nda_version_info(mm: mmap.mmap) -> dict[str, str]:
-    """Read BTS server/client version strings, if present near the start of the file."""
-    metadata: dict[str, str] = {}
-    version_loc = mm.find(b"BTSServer")
-    if version_loc != -1:
-        mm.seek(version_loc)
-        metadata["server_version"] = mm.read(50).strip(b"\x00").decode()
-        mm.seek(50, 1)
-        metadata["client_version"] = mm.read(50).strip(b"\x00").decode()
-    else:
-        xwj = mm.find(b"BTS_XWJ", 0, 1024)
-        if xwj != -1:
-            end = mm.find(b"\x00", xwj, 1024)
-            if end != -1:
-                metadata["server_version"] = mm[xwj:end].decode().strip()
-        else:
-            logger.info("BTS version not found!")
-    return metadata
-
-
-def _decode_text(raw: bytes) -> str:
-    """Decode a fixed-width, null-terminated field."""
-    return raw.split(b"\x00", 1)[0].decode("gb2312", errors="ignore").strip()
-
-
-def _decode_u32(raw: bytes) -> int:
-    """Decode a little-endian uint32 field."""
-    return int.from_bytes(raw, "little")
-
-
-def _decode_datetime_us(raw: bytes) -> str | None:
-    """Decode a little-endian, microseconds-since-epoch uint64 field, or None if zero/out of range."""
-    micros = int.from_bytes(raw, "little")
-    if not micros:
-        return None
-    try:
-        dt = datetime.datetime.fromtimestamp(micros / 1e6, tz=datetime.timezone.utc)
-    except (OSError, OverflowError, ValueError):
-        return None
-    return dt.isoformat(timespec="milliseconds")
-
-
-def _decode_hex(raw: bytes) -> str | None:
-    """Decode a raw byte span as hex, or None if all-zero."""
-    return raw.hex(" ") if any(raw) else None
-
-
-# dtype name -> (byte length, decode function)
-_FIELD_DECODERS: dict[str, tuple[int, Callable[[bytes], str | int | None]]] = {
-    "text32": (32, _decode_text),
-    "text64": (64, _decode_text),
-    "u32": (4, _decode_u32),
-    "datetime_us": (8, _decode_datetime_us),
-    "hex21": (21, _decode_hex),
-}
-
-
-def _read_fields(record: bytes, fields: dict[str, tuple[int, str]]) -> dict[str, str | int]:
-    """Decode a set of name -> (byte offset, dtype) fields from a record, relative to its start."""
-    metadata: dict[str, str | int] = {}
-    for name, (offset, dtype) in fields.items():
-        length, decode = _FIELD_DECODERS[dtype]
-        value = decode(record[offset : offset + length])
-        if value is not None:
-            metadata[name] = value
-    return metadata
-
-
-# Pack test info: name -> (byte offset, dtype), relative to the start of one record.
-# Keys are best guesses based on current test data.
-_PACK_TEST_INFO_FIELDS: dict[str, tuple[int, str]] = {
-    "start_step_id": (4, "u32"),
-    "creator": (8, "text32"),
-    "sn": (40, "text32"),
-    "UNKNOWN_1": (72, "text32"),  # desc? empty in test data
-    "UNKNOWN_2": (104, "text64"),  # step_file_name? empty in test data
-    "UNKNOWN_3": (168, "text64"),  # step_name? empty in test data
-    "UNKNOWN_4": (232, "text32"),  # battery_model? empty in test data
-    "remarks": (264, "text64"),
-    "start_time": (432, "datetime_us"),
-    "stop_time": (440, "datetime_us"),
-}
-
-# Older records (swjVer < 8) seem to have a sligthly different layout
-_PACK_TEST_INFO_FIELDS_OLD: dict[str, tuple[int, str]] = {
-    "UNKNOWN_19": (4, "u32"),  # too large for a step ID; constant across tests, maybe device-level
-    "UNKNOWN_5": (8, "u32"),
-    "creator": (12, "text32"),
-    "sn": (44, "text32"),
-    "UNKNOWN_6": (76, "text32"),  # desc? empty in test data
-    "UNKNOWN_7": (108, "text64"),  # step_file_name? empty in test data
-    "UNKNOWN_8": (172, "text64"),  # step_name? empty in test data
-    "UNKNOWN_9": (236, "text32"),  # battery_model? empty in test data
-    "remarks": (268, "text64"),
-    "test_id": (396, "u32"),
-    "start_time": (400, "datetime_us"),
-    "stop_time": (408, "datetime_us"),
-    "num_datapoints": (416, "u32"),
-}
-
-
-def _decode_pstring(data: bytes, pos: int) -> tuple[str, int]:
-    """Decode one Pascal-style string (1-byte length prefix, no terminator); return (text, next_pos)."""
-    length = data[pos]
-    raw = data[pos + 1 : pos + 1 + length]
-    return raw.decode("gb2312", errors="ignore"), pos + 1 + length
-
-
-def _read_pack_test_info_old_extension(record: bytes) -> dict[str, str]:
-    """Read records from 'pack test info' block in swjVer < 8."""
-    try:
-        pos = 420
-        _bts_version, pos = _decode_pstring(record, pos)
-        guid, pos = _decode_pstring(record, pos)
-        guid_repeat, pos = _decode_pstring(record, pos)
-        device_ip, pos = _decode_pstring(record, pos)
-        unknown_5, pos = _decode_pstring(record, pos)  # unknown, "[org] - dedicated use" in examples
-        unknown_6, pos = _decode_pstring(record, pos)  # unknown
-        unknown_7, pos = _decode_pstring(record, pos)  # zero-length in real samples
-        unknown_8, pos = _decode_pstring(record, pos)  # unknown
-        pos += 4  # 4 fixed unknown bytes
-        server_ip, _pos = _decode_pstring(record, pos)
-    except IndexError:
-        return {}
-    return {
-        "guid": guid,
-        "guid2": guid_repeat,
-        "device_ip": device_ip,
-        "server_ip": server_ip,
-        "UNKNOWN_10": unknown_5,
-        "UNKNOWN_11": unknown_6,
-        "UNKNOWN_12": unknown_7,
-        "UNKNOWN_13": unknown_8,
-    }
-
-
-# Pack test info tail specific to swjVer >= 8, offsets relative to start of record.
-_PACK_TEST_INFO_FIELDS_NEW_TAIL: dict[str, tuple[int, str]] = {
-    "UNKNOWN_14": (328, "text32"),
-    "server_ip": (360, "text64"),
-    "test_id": (424, "u32"),  # Not very confident
-    "num_datapoints": (428, "u32"),
-    "UNKNOWN_15": (448, "u32"),  # zero in every sample seen
-    "UNKNOWN_16": (452, "u32"),  # decodes to a nonsense 2010-era date, not a real timestamp
-    "UNKNOWN_17": (456, "u32"),  # constant 1 in every sample seen
-    "UNKNOWN_18": (460, "hex21"),  # rest of the record, resembles a pattern also seen in piLogEx
-}
-
-# piLogEx, doesn't seem to be present in the older BTS9.0.3 file.
-# IP is probably device or middle machine, server_ip is usually 127.0.0.1
-_PILOGEX_FIELDS: dict[str, tuple[int, str]] = {
-    "device_ip": (223, "text32"),
-    "hostname": (255, "text32"),
-}
-
-
-def _read_nda_130_log_ex(mm: mmap.mmap) -> dict[str, str | int]:
-    """Read the 'log ex' block from an nda_version 130 file.
-
-    The head info 9022 header stores a u64 {begin, length} pointer to this block
-    at fixed offsets 242/250.
-    """
-    log_ex_begin = int.from_bytes(mm[242:250], "little")
-    log_ex_len = int.from_bytes(mm[250:258], "little")
-    if not log_ex_begin or not log_ex_len or log_ex_begin + log_ex_len > len(mm):
-        return {}
-    record = mm[log_ex_begin : log_ex_begin + log_ex_len]
-    return _read_fields(record, _PILOGEX_FIELDS)
-
-
-def _read_nda_130_test_info(mm: mmap.mmap) -> dict[str, str | int]:
-    """Read records from 'pack test info' from an nda_version 130 file.
-
-    The header stores a u64 {begin, length} pointer to this block at fixed offsets 34/42.
-    """
-    test_begin = int.from_bytes(mm[34:42], "little")
-    test_len = int.from_bytes(mm[42:50], "little")
-    if not test_begin or not test_len:
-        return {}
-    record = mm[test_begin : test_begin + test_len]
-    swj_ver = int.from_bytes(record[0:2], "little")
-    is_old = swj_ver < 8
-    fields = _PACK_TEST_INFO_FIELDS_OLD if is_old else _PACK_TEST_INFO_FIELDS
-    metadata = _read_fields(record, fields)
-    if is_old:
-        metadata.update(_read_pack_test_info_old_extension(record))
-    else:
-        metadata.update(_read_fields(record, _PACK_TEST_INFO_FIELDS_NEW_TAIL))
-    return metadata
-
-
-# Version string like "9.1.5.7.20250527.R5", 4+ dot-groups
-_BTS_VERSION_RE = re.compile(rb"\d+(?:\.[\dA-Za-z]+){4,}")
-
-
-def _read_nda_130_metadata(mm: mmap.mmap) -> dict[str, str | float | int]:
-    """Read metadata specific to nda_version 130 (BTS9.0/9.1)."""
-    metadata: dict[str, str | float | int] = {}
-    match = _BTS_VERSION_RE.search(mm[:2048])
-    if match:
-        metadata["bts_version"] = match.group().decode()
-    else:
-        logger.info("BTS version not found in header.")
-
-    metadata["active_mass_mg"] = _nda_active_mass_mg(mm, 130)
-    metadata.update(_read_nda_130_test_info(mm))
-    metadata.update(_read_nda_130_log_ex(mm))
-    return metadata
-
-
-def read_nda_metadata(file: str | Path) -> dict[str, str | int | float]:
-    """Read metadata from a Neware .nda file.
-
-    Args:
-        file: Path of .nda file to read
-
-    Returns:
-        Dictionary containing metadata
-
-    """
-    file = Path(file)
-    with file.open("rb") as f:
-        mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-
-    if mm.read(6) != b"NEWARE":
-        msg = f"{file} does not appear to be a Neware file."
-        raise ValueError(msg)
-
-    metadata: dict[str, int | str | float] = {}
-
-    # Get the file version
-    nda_version = int(mm[14])
-    metadata["nda_version"] = nda_version
-    metadata.update(_read_nda_version_info(mm))
-
-    # NDA 1-29 fields: header stores {nBegin, nLen} pointers to a device-info block and a test-info block
-    if 1 <= nda_version <= 29:
-        metadata["active_mass_mg"] = _nda_active_mass_mg(mm, nda_version)
-        metadata.update(_read_nda_test_info(mm, nda_version))
-
-    # NDA 130 specific fields
-    elif nda_version == 130:
-        warnings.warn(
-            (
-                "read_metadata for NDA 130 (BTS9) has not been thoroughly tested due to lack of test data. "
-                "There may be wrong fields or 'UNKNOWN_x' keys present. "
-                "If you can, please share a sample file at "
-                "https://github.com/empaeconversion/fastnda/issues so we can improve reading this format."
-            ),
-            stacklevel=3,
-        )
-        metadata.update(_read_nda_130_metadata(mm))
-
-    # Drop empty UNKNOWN_x fields
-    def _unknown_is_empty(value: str | float) -> bool:
-        return not value.strip("\x00").strip() if isinstance(value, str) else not value
-
-    return {k: v for k, v in metadata.items() if not (k.startswith("UNKNOWN_") and _unknown_is_empty(v))}
 
 
 def _find_header(mm: mmap.mmap, header: bytes | int) -> int:
@@ -469,21 +141,49 @@ def _nda_multiplier(mm: mmap.mmap, record_range: pl.Expr | None = None) -> pl.Ex
     return _range_to_mult(record_range.replace(0, fixed_range))
 
 
+# Byte that cannot occur in an aux column name, used to split the pivot's output names
+_AUX_PIVOT_SEP = "\x00"
+
+
+def _aux_pivot_name(col: str, value_cols: list[str]) -> str:
+    """Name a pivoted aux column aux{channel}_{measurement}, e.g. aux1_voltage_V."""
+    # Polars names a pivot of one value column by the channel
+    # If there is more than one column, it names them name+sep+channel
+    if len(value_cols) == 1:
+        name, channel = value_cols[0], col
+    else:
+        name, _, channel = col.partition(_AUX_PIVOT_SEP)
+    return f"aux{channel}_{name.removeprefix('aux_')}"
+
+
+def _aux_column_order(channels: list[int], value_cols: list[str]) -> list[str]:
+    """Merge aux column names, grouped by channel then measurement."""
+    return [f"aux{channel}_{col.removeprefix('aux_')}" for channel in channels for col in value_cols]
+
+
 def _merge_aux(
     df: pl.DataFrame,
     aux_df: pl.DataFrame,
 ) -> pl.DataFrame:
     """Merge aux left into data, renaming columns if aux channel in data."""
-    if not aux_df.is_empty():
-        if "aux" in aux_df.columns:
-            aux_df = aux_df.unique(subset=["index", "aux"])
-            aux_df = aux_df.pivot(index="index", on="aux", separator="")
-            # Rename - add number to aux prefix e.g. aux1_voltage_volt
-            aux_df.columns = [f"aux{col[-1]}_{col[4:-1]}" if col != "index" else "index" for col in aux_df.columns]
-        else:
-            aux_df = aux_df.unique(subset=["index"])
-        return df.join(aux_df, on="index", how="left")
-    return df
+    if aux_df.is_empty():
+        return df
+    if "aux" not in aux_df.columns:
+        return df.join(aux_df.unique(subset=["index"]), on="index", how="left")
+    value_cols = [col for col in aux_df.columns if col not in {"index", "aux"}]
+    if not value_cols:
+        return df
+    channels = aux_df["aux"].unique().sort().to_list()
+    # Shortcut to a horizontal join if possible (pivot is slow)
+    if len(channels) == 1 and len(aux_df) == len(df) and aux_df["index"].equals(df["index"]):
+        names = dict(zip(value_cols, _aux_column_order(channels, value_cols), strict=True))
+        return pl.concat([df, aux_df.select(value_cols).rename(names)], how="horizontal")
+    # Full pivot and merge, slow but may be necessary
+    aux_df = aux_df.unique(subset=["index", "aux"])
+    aux_df = aux_df.pivot(index="index", on="aux", values=value_cols, separator=_AUX_PIVOT_SEP)
+    aux_df.columns = [col if col == "index" else _aux_pivot_name(col, value_cols) for col in aux_df.columns]
+    aux_df = aux_df.select("index", *_aux_column_order(channels, value_cols))
+    return df.join(aux_df, on="index", how="left")
 
 
 def _read_nda(mm: mmap.mmap) -> pl.DataFrame:
@@ -1080,76 +780,168 @@ def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
     return _merge_aux(data_df, aux_df)
 
 
-def _read_nda_129(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 129 (deprecated by Neware)."""
-    header_idx, _data_len = _nda_head_main(mm, pos_offset=82, pos64=True)
-    arr = _get_arr_from_nda(mm, header=header_idx, record_len=88)
+# Identifier byte in record, pos 4 at record version 2, pos 0 at record version 19
+_BTS9_IDENTIFIER = 85
+
+# BTS9 record version (swjVer)
+_BTS9_VERSION_AT = 16
+_CONFIRMED_BTS9_VERSIONS = frozenset({2, 3, 19})
+
+
+def _bts9_data_blocks(mm: mmap.mmap) -> list[tuple[int, int]]:
+    """Read the {begin, length} pointers to every data block of a BTS9 file.
+
+    Most files hold a single block, some files have multiple blocks each with
+    its own 1024-byte NEWARE header.
+    """
+    begin, total_length = _nda_head_main(mm, pos_offset=82, pos64=True)
+    if begin != 0 or mm[1024:1030] != b"NEWARE":
+        return [(begin, total_length)]
+    # A header with no begin summarises all blocks
+    blocks: list[tuple[int, int]] = []
+    head = 1024
+    seen: set[int] = set()
+    while head not in seen and mm[head : head + 6] == b"NEWARE":
+        seen.add(head)
+        block_begin, block_length = _nda_head_main(mm, pos_offset=head + 82, pos64=True)
+        if block_length:
+            blocks.append((block_begin, block_length))
+        # A header's last pointer ends on the next header or EOF
+        foot_begin, foot_length = _nda_head_main(mm, pos_offset=head + 242, pos64=True)
+        head = foot_begin + foot_length
+    if not blocks:
+        msg = "BTS9 header contains no data blocks."
+        raise EOFError(msg)
+    chained_length = sum(length for _, length in blocks)
+    if chained_length != total_length:
+        warnings.warn(
+            f"BTS9 section chain covers {chained_length} bytes but the header reports "
+            f"{total_length} - some records may be missing.",
+            UnverifiedFormatWarning,
+            stacklevel=2,
+        )
+    return blocks
+
+
+def _bts9_record_len(mm: mmap.mmap, blocks: list[tuple[int, int]]) -> int:
+    """Guess the record length at record version 2, which is not held in the header."""
+    begin, first_len = blocks[0]
+    block_end = begin + first_len if first_len else len(mm)
+    # Records open with a constant 4-byte tag (maybe device type?) followed by an identifier
+    tag = mm[begin : begin + 4] + bytes([_BTS9_IDENTIFIER])
+    next_record = mm.find(tag, begin + 1, block_end)
+    # If no next record, it is one record
+    record_len = next_record - begin if next_record != -1 else block_end - begin
+    if record_len <= 0:
+        msg = f"Could not find a record at {begin} matching record version 2."
+        raise EOFError(msg)
+    # Correct length should integer divide every data block
+    if any(length % record_len for _, length in blocks):
+        msg = f"Record length {record_len} at record version 2 does not divide every data block."
+        raise ValueError(msg)
+    return record_len
+
+
+def _df_from_blocks(
+    mm: mmap.mmap,
+    blocks: list[tuple[int, int]],
+    record_len: int,
+    dtype: np.dtype,
+    mask: int,
+) -> pl.DataFrame:
+    """Merge data block arrays into one dataframe, concat in polars for speed."""
+    dfs = [
+        _mask_arr(_get_arr_from_nda(mm, header=begin, record_len=record_len, data_len=length), dtype, mask)
+        for begin, length in blocks
+    ]
+    return pl.concat(dfs, how="vertical", rechunk=False)
+
+
+def _read_bts9_2(mm: mmap.mmap) -> pl.DataFrame:
+    """Read BTS9 file version 2."""
+    blocks = _bts9_data_blocks(mm)
+    record_len = _bts9_record_len(mm, blocks)
     dtype = np.dtype(
         [
+            ("_pad1", "V4"),  # btDevType, btDevID, btUnitID, btChlID
             ("identifier", "<u1"),
-            ("_pad0", "V5"),  # btDevType, btDevID, btUnitID, btChlID, btAuxChlIndex
-            ("_pad0b", "V2"),  # wReserve
-            ("_pad0c", "V4"),  # dwTestID
-            ("index", "<u4"),  # dwTestDataSN
-            ("_pad0d", "V4"),  # dwUnitNuid
+            ("_pad2", "V4"),
             ("step_index", "<u1"),
             ("step_type", "<u1"),
-            ("_pad1", "V1"),  # btStepChgCount
-            ("_pad2", "V1"),  # btReserve
-            ("_pad3", "V4"),  # stWorkStatus
-            ("step_time_s", "<u4"),  # Time64.dwS (seconds)
-            ("step_time_ns", "<u4"),  # Time64.dwNS (nanoseconds)
+            ("_pad3", "V5"),
+            ("index", "<u4"),
+            ("_pad4", "V8"),
+            ("step_time_s", "<u8"),  # microseconds
             ("voltage_V", "<f4"),
             ("current_mA", "<f4"),
             ("_pad5", "V8"),  # fInterRes, fTempture
-            ("charge_capacity_mAh", "<f4"),
-            ("charge_energy_mWh", "<f4"),
-            ("discharge_capacity_mAh", "<f4"),
-            ("discharge_energy_mWh", "<f4"),
+            ("charge_capacity_mAh", "<f4"),  # mA.s
+            ("charge_energy_mWh", "<f4"),  # mW.s
+            ("discharge_capacity_mAh", "<f4"),  # mA.s
+            ("discharge_energy_mWh", "<f4"),  # mW.s
             ("unix_time_s", "<u8"),  # microseconds
-            ("_pad6", "V12"),  # dwCurStepRange, dwLogCode, dwCRC32
+            ("_pad6", f"V{record_len - 76}"),  # dwCurStepRange, dwLogCode, dwCRC32
         ]
     )
+    # Files may or may not put a negative sign on discharge
+    # abs those cols and let main calculate net capacity/energy
     mult_cols = ["charge_capacity_mAh", "discharge_capacity_mAh", "charge_energy_mWh", "discharge_energy_mWh"]
-    return (
-        _view_arr(arr, dtype)
-        .filter(pl.col("identifier").is_in([0, 85]))
-        .drop("identifier")
-        .with_columns(
-            [
-                pl.col(mult_cols) / 3600,
-                (pl.col("unix_time_s").cast(pl.Float64) / 1e6).alias("unix_time_s"),
-                (pl.col("step_time_s").cast(pl.Float64) + pl.col("step_time_ns") / 1e9)
-                .cast(pl.Float32)
-                .alias("step_time_s"),
-                _count_changes(pl.col("step_index")).alias("step_count"),
-            ]
-        )
-        .drop("step_time_ns")
+    return _df_from_blocks(mm, blocks, record_len, dtype, _BTS9_IDENTIFIER).with_columns(
+        [
+            pl.col(mult_cols).abs() / 3600,
+            (pl.col("unix_time_s").cast(pl.Float64) / 1e6).alias("unix_time_s"),
+            (pl.col("step_time_s").cast(pl.Float64) / 1e6).alias("step_time_s"),
+            _count_changes(pl.col("step_index")).alias("step_count"),
+        ]
     )
 
 
-def _read_nda_130(mm: mmap.mmap) -> pl.DataFrame:
-    """Figure out whether BTS9.0 or BTS9.1 and pass to correct function."""
-    subver = int(mm[1024])
-    if subver == 85:
-        return _read_nda_130_91(mm)
-    if subver == 18:
-        return _read_nda_130_90(mm)
-    msg = f"nda 130 subversion {subver} not supported"
+def _bts9_probe_reader(mm: mmap.mmap) -> Callable[[mmap.mmap], pl.DataFrame]:
+    """Pick a BTS9 reader from where the identifier byte sits in the first record."""
+    begin = _bts9_data_blocks(mm)[0][0]
+    if mm[begin + 4] == _BTS9_IDENTIFIER:
+        return _read_bts9_2
+    if mm[begin] == _BTS9_IDENTIFIER:
+        return _read_bts9_19
+    msg = f"nda 130 data block at {begin} does not match a known BTS9 record struct"
     raise NotImplementedError(msg)
 
 
-def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 130 BTS9.1."""
-    # Data starts at 1024, search forward for next identifier for record length
-    identifier_bytes = mm[1024:1026]
+def _bts9_reader(mm: mmap.mmap) -> Callable[[mmap.mmap], pl.DataFrame]:
+    """Pick the BTS9 record reader from the record version in the header."""
+    bts9_version = int.from_bytes(mm[_BTS9_VERSION_AT : _BTS9_VERSION_AT + 2], "little")
+    reader = _BTS9_READERS.get(bts9_version)
+    if bts9_version not in _CONFIRMED_BTS9_VERSIONS:
+        detail = (
+            "has not been checked against a vendor export"
+            if reader is not None
+            else "has not been seen before, so the record layout is a guess"
+        )
+        warnings.warn(
+            f"BTS9 record version {bts9_version} {detail} - results may be incorrect. If you can, please "
+            "share a sample file at https://github.com/empaeconversion/fastnda/issues "
+            "so we can confirm this format.",
+            UnverifiedFormatWarning,
+            stacklevel=3,
+        )
+    return reader if reader is not None else _bts9_probe_reader(mm)
+
+
+def _read_bts9(mm: mmap.mmap) -> pl.DataFrame:
+    """Read an nda version 129 or 130 file, with the struct its record version calls for."""
+    return _bts9_reader(mm)(mm)
+
+
+def _read_bts9_19(mm: mmap.mmap) -> pl.DataFrame:
+    """Read the record struct introduced at record version 19, used by nda 130."""
+    # Search forward from the first record for the next identifier to get the record length
+    blocks = _bts9_data_blocks(mm)
+    begin = blocks[0][0]
+    identifier_bytes = mm[begin : begin + 2]
     identifier_int = int.from_bytes(identifier_bytes, byteorder="little", signed=False)
-    record_len = mm.find(mm[1024:1026], 1026) - 1024
+    record_len = mm.find(identifier_bytes, begin + 2) - begin
 
-    arr = _get_arr_from_nda(mm, 1024, record_len)
-
-    # In BTS9.1, data and aux are in the same rows
+    # In this struct, data and aux are in the same rows
     dtype_list = [
         ("identifier", "<u2"),
         ("step_index", "<u1"),
@@ -1173,7 +965,7 @@ def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
         dtype_list.append(("_pad4", f"V{record_len - 56}"))
     data_dtype = np.dtype(dtype_list)
 
-    data_df = _mask_arr(arr, data_dtype, identifier_int).with_columns(
+    data_df = _df_from_blocks(mm, blocks, record_len, data_dtype, identifier_int).with_columns(
         [
             pl.col("capacity_mAs").clip(lower_bound=0).alias("charge_capacity_mAh") / 3600,
             pl.col("capacity_mAs").clip(upper_bound=0).abs().alias("discharge_capacity_mAh") / 3600,
@@ -1199,45 +991,10 @@ def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
     return data_df.drop(["uts_ns", "energy_mWs", "capacity_mAs", "time_ns", "max_total_time_s"])
 
 
-def _read_nda_130_90(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 130 BTS9.0."""
-    # Data start seems to be (18, 80, 0, 7, 85, 129, 1, 6)
-    # Aux identifiers are (18, 80, 0, 7, 88, 129, 1, 6) and (18, 80, 0, 7, 89, 129, 1, 6)
-    arr = _get_arr_from_nda(mm, header=b"\x12\x50\x00\x07\x55\x81\x01\x06", record_len=88)
-    data_dtype = np.dtype(
-        [
-            ("_pad1", "V4"),
-            ("identifier", "<u1"),
-            ("_pad2", "V4"),
-            ("step_index", "<u1"),
-            ("step_type", "<u1"),
-            ("_pad3", "V5"),
-            ("index", "<u4"),
-            ("_pad4", "V8"),
-            ("step_time_s", "<u8"),
-            ("voltage_V", "<f4"),
-            ("current_mA", "<f4"),
-            ("_pad5", "V16"),
-            ("capacity_mAh", "<f4"),
-            ("energy_mWh", "<f4"),
-            ("unix_time_s", "<u8"),
-            ("_pad6", "V12"),
-        ]
-    )
-    return _mask_arr(arr, data_dtype, 85).with_columns(
-        [
-            pl.col("unix_time_s").cast(pl.Float64) / 1e6,  # us -> s
-            (pl.col("step_time_s") / 1e6).cast(pl.Float64),  # us -> s
-            pl.col(["capacity_mAh", "energy_mWh"]) / 3600,
-            _count_changes(pl.col("step_index")).alias("step_count"),
-        ]
-    )
-
-
 # NDA FileVer code -> struct type reader
 _NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
     1: _read_nda_1,
-    2: _read_nda_2,  # Deprecated by Neware
+    2: _read_nda_2,
     3: _read_nda_3,
     4: _read_nda_3,
     5: _read_nda_5,
@@ -1256,7 +1013,7 @@ _NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
     18: _read_nda_11,
     19: _read_nda_19,
     20: _read_nda_14,
-    # 21: Missing in Neware
+    # 21: Missing
     22: _read_nda_14,
     23: _read_nda_14,
     24: _read_nda_14,
@@ -1265,12 +1022,20 @@ _NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
     27: _read_nda_25,
     28: _read_nda_29,
     29: _read_nda_29,
-    129: _read_nda_129,  # Deprecated by Neware
-    130: _read_nda_130,  # Variable length
+    129: _read_bts9,
+    130: _read_bts9,
+}
+
+# Record version -> struct type reader, named for the lowest version using that struct
+_BTS9_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
+    2: _read_bts9_2,
+    3: _read_bts9_2,
+    19: _read_bts9_19,
+    42: _read_bts9_19,
 }
 
 # Reader functions confirmed against real data
-_CONFIRMED_READER_NAMES = frozenset({"_read_nda_5", "_read_nda_14", "_read_nda_29", "_read_nda_130"})
+_CONFIRMED_READER_NAMES = frozenset({"_read_nda_5", "_read_nda_14", "_read_nda_29", "_read_bts9"})
 _CONFIRMED_NDA_VERSIONS = frozenset(
     version for version, reader in _NDA_READERS.items() if reader.__name__ in _CONFIRMED_READER_NAMES
 )

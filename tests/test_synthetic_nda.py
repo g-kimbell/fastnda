@@ -11,6 +11,7 @@ Several scaling factors (voltage, current, capacity/energy, time, ...) for
 newly-added structs are currently best guesses, not confirmed with real data.
 """
 
+import logging
 import mmap
 import struct
 import warnings
@@ -167,12 +168,18 @@ def _header_offset_preamble(
     return bytes(buf)
 
 
+# Test info record size and start_time offset for an nda_version 1-10 file
+_TEST_INFO_LEN_V1 = 211
+_START_TIME_OFFSET_V1 = 36
+
+
 def _nda_1_29_header(
     main_begin: int,
     *,
     main_len: int = 0,
     current_range: int = 0,
     version_byte: int | None = None,
+    start_time: str | None = None,
 ) -> bytes:
     """Build the header of an nda_version 1-29 files.
 
@@ -185,6 +192,8 @@ def _nda_1_29_header(
         main_len: Byte length of the data section, or 0 to read to the end of the file.
         current_range: Channel current range, scales current, capacity and energy.
         version_byte: File version, written to offset 14.
+        start_time: Test start time string, written into a v1 test info record
+            appended after the device info block and pointed to from 24/28.
 
     Returns:
         The header bytes, including the device info block.
@@ -202,6 +211,45 @@ def _nda_1_29_header(
     buf[68:72] = main_len.to_bytes(4, "little")
     range_at = device_block_begin + 26
     buf[range_at : range_at + 4] = current_range.to_bytes(4, "little", signed=True)
+    if start_time is None:
+        return bytes(buf)
+    test_block = bytearray(_TEST_INFO_LEN_V1)
+    encoded = start_time.encode()
+    test_block[_START_TIME_OFFSET_V1 : _START_TIME_OFFSET_V1 + len(encoded)] = encoded
+    buf[24:28] = len(buf).to_bytes(4, "little")
+    buf[28:32] = len(test_block).to_bytes(4, "little")
+    return bytes(buf + test_block)
+
+
+def _nda_aux_header(
+    main_begin: int,
+    main_len: int,
+    aux_begin: int,
+    aux_len: int,
+    *,
+    version_byte: int | None = None,
+) -> bytes:
+    """Build a header holding both the main and aux {begin, length} pointers.
+
+    Args:
+        main_begin: Start offset of the main data section.
+        main_len: Byte length of the main data section.
+        aux_begin: Start offset of the aux data section.
+        aux_len: Byte length of the aux data section.
+        version_byte: File version, written to offset 14.
+
+    Returns:
+        The 80-byte header bytes.
+
+    """
+    buf = bytearray(80)
+    buf[0:6] = b"NEWARE"
+    if version_byte is not None:
+        buf[14] = version_byte
+    buf[64:68] = main_begin.to_bytes(4, "little")
+    buf[68:72] = main_len.to_bytes(4, "little")
+    buf[72:76] = aux_begin.to_bytes(4, "little")
+    buf[76:80] = aux_len.to_bytes(4, "little")
     return bytes(buf)
 
 
@@ -624,6 +672,17 @@ class TestReadNda11:
     ]
     # range=100 -> multiplier 1e-2
     DEFAULTS: ClassVar[dict[str, int]] = {"identifier": 85, "cycle_count": 0, "range": 100}
+    AUX_LAYOUT: ClassVar[list[tuple[str, str]]] = [
+        ("identifier", "<u1"),
+        ("aux", "<u1"),
+        ("index", "<u4"),
+        ("_pad1", "V15"),
+        ("aux_voltage_V", "<i4"),
+        ("_pad2", "V8"),
+        ("aux_temperature_degC", "<i2"),
+        ("_pad3", "V34"),
+    ]
+    AUX_DEFAULTS: ClassVar[dict[str, int]] = {"identifier": 101}
 
     def test_decodes_expected_values(self) -> None:
         """Pack synthetic records and check every decoded column against hand-computed values."""
@@ -729,6 +788,90 @@ class TestReadNda11:
         _assert_col(df, "step_count", list(range(1, n_rows + 1)))
         _assert_col(df, "current_mA", [200.0, -150.0] * n_cycles)
 
+    def test_aux_channels_are_pivoted_per_channel(self) -> None:
+        """Aux records are decoded, scaled and joined onto the data rows by channel number."""
+        data = _build_rows(
+            self.LAYOUT,
+            self.DEFAULTS,
+            columns={
+                "index": [1, 2],
+                "step_index": [1, 2],
+                "step_type": [1, 2],
+                "voltage_V": [36000, 35000],
+                "current_mA": [20000, -15000],
+            },
+        )
+        aux = _build_rows(
+            self.AUX_LAYOUT,
+            self.AUX_DEFAULTS,
+            columns={
+                "index": [1, 2, 1, 2],
+                "aux": [1, 1, 2, 2],
+                "aux_voltage_V": [33000, 33500, 34000, 34500],
+                "aux_temperature_degC": [251, 252, 253, 254],
+            },
+        )
+        main_begin = 80
+        aux_begin = main_begin + len(data)
+        header = _nda_aux_header(main_begin, len(data), aux_begin, len(aux), version_byte=11)
+        mm = _make_mmap(header + data + aux)
+
+        df = nda._read_nda_11(mm)
+
+        _assert_col(df, "aux1_voltage_V", [3.3, 3.35])
+        _assert_col(df, "aux1_temperature_degC", [25.1, 25.2])
+        _assert_col(df, "aux2_voltage_V", [3.4, 3.45])
+        _assert_col(df, "aux2_temperature_degC", [25.3, 25.4])
+
+    def test_aux_drops_all_zero_columns(self) -> None:
+        """An aux column that is zero in every record is dropped instead of joined."""
+        data = _build_rows(
+            self.LAYOUT,
+            self.DEFAULTS,
+            columns={"index": [1, 2], "step_index": [1, 2], "step_type": [1, 2], "current_mA": [20000, -15000]},
+        )
+        aux = _build_rows(
+            self.AUX_LAYOUT,
+            self.AUX_DEFAULTS,
+            columns={"index": [1, 2], "aux": [1, 1], "aux_temperature_degC": [251, 252]},
+        )
+        main_begin = 80
+        aux_begin = main_begin + len(data)
+        header = _nda_aux_header(main_begin, len(data), aux_begin, len(aux), version_byte=11)
+        mm = _make_mmap(header + data + aux)
+
+        df = nda._read_nda_11(mm)
+
+        _assert_col(df, "aux1_temperature_degC", [25.1, 25.2])
+        assert "aux1_voltage_V" not in df.columns
+
+    def test_aux_records_with_other_identifiers_are_ignored(self) -> None:
+        """Only records with the aux identifier are decoded from the aux section."""
+        data = _build_rows(
+            self.LAYOUT,
+            self.DEFAULTS,
+            columns={"index": [1, 2], "step_index": [1, 2], "step_type": [1, 2], "current_mA": [20000, -15000]},
+        )
+        aux = _build_rows(
+            self.AUX_LAYOUT,
+            self.AUX_DEFAULTS,
+            columns={"index": [1, 2], "aux": [1, 1], "aux_temperature_degC": [251, 252]},
+        )
+        other = _build_rows(
+            self.AUX_LAYOUT,
+            {"identifier": 5},
+            columns={"index": [1], "aux": [1], "aux_temperature_degC": [999]},
+        )
+        main_begin = 80
+        aux_begin = main_begin + len(data)
+        aux_section = aux + other
+        header = _nda_aux_header(main_begin, len(data), aux_begin, len(aux_section), version_byte=11)
+        mm = _make_mmap(header + data + aux_section)
+
+        df = nda._read_nda_11(mm)
+
+        _assert_col(df, "aux1_temperature_degC", [25.1, 25.2])
+
 
 class TestReadNda14:
     """NDA file versions 14, 16, 17, 20, 22, 23, 24."""
@@ -755,6 +898,17 @@ class TestReadNda14:
     ]
     DEFAULTS: ClassVar[dict[str, int]] = {"identifier": 85, "cycle_count": 0, "range": 100}
     SENTINEL: ClassVar[bytes] = b"\xaa\x00\x01\x00\x00\x00" + b"\x00" * (86 - 6)
+    AUX_LAYOUT: ClassVar[list[tuple[str, str]]] = [
+        ("identifier", "<u1"),
+        ("aux", "<u1"),
+        ("index", "<u4"),
+        ("_pad1", "V16"),
+        ("aux_voltage_V", "<i4"),
+        ("_pad2", "V8"),
+        ("aux_temperature_degC", "<i2"),
+        ("_pad3", "V50"),
+    ]
+    AUX_DEFAULTS: ClassVar[dict[str, int]] = {"identifier": 101}
 
     def test_decodes_expected_values(self) -> None:
         """Pack synthetic records and check every decoded column against hand-computed values."""
@@ -791,6 +945,89 @@ class TestReadNda14:
         _assert_col(df, "discharge_energy_mWh", [0.0, 0.5])
         _assert_col(df, "unix_time_s", [1700000000, 1700000010])
         _assert_col(df, "step_count", [1, 2])
+
+    def test_aux_channels_are_pivoted_per_channel(self) -> None:
+        """Aux records are decoded, scaled and joined onto the data rows by channel number."""
+        data = _build_rows(
+            self.LAYOUT,
+            self.DEFAULTS,
+            columns={
+                "index": [1, 2],
+                "step_index": [1, 2],
+                "step_type": [1, 2],
+                "voltage_V": [36000, 35000],
+                "current_mA": [20000, -15000],
+            },
+        )
+        aux = _build_rows(
+            self.AUX_LAYOUT,
+            self.AUX_DEFAULTS,
+            columns={
+                "index": [1, 2, 1, 2],
+                "aux": [1, 1, 2, 2],
+                "aux_voltage_V": [33000, 33500, 34000, 34500],
+                "aux_temperature_degC": [251, 252, 253, 254],
+            },
+        )
+        main_begin = 80
+        aux_begin = main_begin + len(data)
+        header = _nda_aux_header(main_begin, len(data), aux_begin, len(aux), version_byte=14)
+        mm = _make_mmap(header + data + aux)
+
+        df = nda._read_nda_14(mm)
+
+        _assert_col(df, "aux1_voltage_V", [3.3, 3.35])
+        _assert_col(df, "aux1_temperature_degC", [25.1, 25.2])
+        _assert_col(df, "aux2_voltage_V", [3.4, 3.45])
+        _assert_col(df, "aux2_temperature_degC", [25.3, 25.4])
+
+    def test_aux_drops_all_zero_columns(self) -> None:
+        """An aux column that is zero in every record is dropped instead of joined."""
+        data = _build_rows(
+            self.LAYOUT,
+            self.DEFAULTS,
+            columns={"index": [1, 2], "step_index": [1, 2], "step_type": [1, 2], "current_mA": [20000, -15000]},
+        )
+        aux = _build_rows(
+            self.AUX_LAYOUT,
+            self.AUX_DEFAULTS,
+            columns={"index": [1, 2], "aux": [1, 1], "aux_voltage_V": [33000, 33500]},
+        )
+        main_begin = 80
+        aux_begin = main_begin + len(data)
+        header = _nda_aux_header(main_begin, len(data), aux_begin, len(aux), version_byte=14)
+        mm = _make_mmap(header + data + aux)
+
+        df = nda._read_nda_14(mm)
+
+        _assert_col(df, "aux1_voltage_V", [3.3, 3.35])
+        assert "aux1_temperature_degC" not in df.columns
+
+    def test_aux_duplicate_records_keep_one_per_channel(self) -> None:
+        """Repeated (index, aux) pairs are deduplicated before the pivot."""
+        data = _build_rows(
+            self.LAYOUT,
+            self.DEFAULTS,
+            columns={"index": [1, 2], "step_index": [1, 2], "step_type": [1, 2], "current_mA": [20000, -15000]},
+        )
+        aux = _build_rows(
+            self.AUX_LAYOUT,
+            self.AUX_DEFAULTS,
+            columns={
+                "index": [1, 1, 2],
+                "aux": [1, 1, 1],
+                "aux_temperature_degC": [251, 251, 252],
+            },
+        )
+        main_begin = 80
+        aux_begin = main_begin + len(data)
+        header = _nda_aux_header(main_begin, len(data), aux_begin, len(aux), version_byte=14)
+        mm = _make_mmap(header + data + aux)
+
+        df = nda._read_nda_14(mm)
+
+        assert len(df) == 2
+        _assert_col(df, "aux1_temperature_degC", [25.1, 25.2])
 
 
 class TestReadNda19:
@@ -994,19 +1231,15 @@ class TestReadNda129:
     """NDA file version 129."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
+        ("_pad1", "V4"),
         ("identifier", "<u1"),
-        ("_pad0", "V5"),
-        ("_pad0b", "V2"),
-        ("_pad0c", "V4"),
-        ("index", "<u4"),
-        ("_pad0d", "V4"),
+        ("_pad2", "V4"),
         ("step_index", "<u1"),
         ("step_type", "<u1"),
-        ("_pad1", "V1"),
-        ("_pad2", "V1"),
-        ("_pad3", "V4"),
-        ("step_time_s", "<u4"),  # Time64.dwS (seconds)
-        ("step_time_ns", "<u4"),  # Time64.dwNS (nanoseconds)
+        ("_pad3", "V5"),
+        ("index", "<u4"),
+        ("_pad4", "V8"),
+        ("step_time_s", "<u8"),  # microseconds
         ("voltage_V", "<f4"),
         ("current_mA", "<f4"),
         ("_pad5", "V8"),
@@ -1017,7 +1250,7 @@ class TestReadNda129:
         ("unix_time_s", "<u8"),
         ("_pad6", "V12"),
     ]
-    DEFAULTS: ClassVar[dict[str, float]] = {}
+    DEFAULTS: ClassVar[dict[str, float]] = {"identifier": 85}
 
     def test_decodes_expected_values(self) -> None:
         """Pack synthetic records and check every decoded column against hand-computed values.
@@ -1029,12 +1262,10 @@ class TestReadNda129:
             self.LAYOUT,
             self.DEFAULTS,
             columns={
-                "identifier": [85, 0],  # exercise the "0 or 85" mask
                 "index": [1, 2],
                 "step_index": [1, 2],
                 "step_type": [1, 2],
-                "step_time_s": [10, 20],
-                "step_time_ns": [500_000_000, 250_000_000],  # exercises Time64 dwS+dwNS combination
+                "step_time_s": [10_500_000, 20_250_000],  # microseconds
                 "voltage_V": [3.6, 3.5],
                 "current_mA": [200.0, -150.0],
                 "charge_capacity_mAh": [1800.0, 0.0],
@@ -1044,10 +1275,10 @@ class TestReadNda129:
                 "unix_time_s": [1_700_000_000_000_000, 1_700_000_010_000_000],  # microseconds
             },
         )
-        header = _header_offset_preamble(pos_offset=82, main_begin=98, pos64=True)
+        header = _header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True)
         mm = _make_mmap(header + data)
 
-        df = nda._read_nda_129(mm)
+        df = nda._read_bts9_2(mm)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "step_time_s", [10.5, 20.25])
@@ -1060,9 +1291,96 @@ class TestReadNda129:
         _assert_col(df, "unix_time_s", [1700000000.0, 1700000010.0])
         _assert_col(df, "step_count", [1, 2])
 
+    def test_single_record_block(self) -> None:
+        """A block with one record uses block length as record length."""
+        data = _build_rows(self.LAYOUT, self.DEFAULTS, columns={"index": [1], "step_index": [1], "step_type": [1]})
+        header = _header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True)
+        mm = _make_mmap(header + data)
+
+        df = nda._read_bts9_2(mm)
+
+        _assert_col(df, "index", [1])
+
+    def test_record_len_ignores_bytes_after_the_block(self) -> None:
+        """Searching for record length does not catch bytes in surrounding data/metadata that might match."""
+        data = _build_rows(self.LAYOUT, self.DEFAULTS, columns={"index": [1], "step_index": [1], "step_type": [1]})
+        header = _header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True)
+        trailing = bytes(40) + bytes(4) + bytes([85]) + bytes(100)
+        mm = _make_mmap(header + data + trailing)
+
+        df = nda._read_bts9_2(mm)
+
+        _assert_col(df, "index", [1])
+
+    def test_reads_every_block(self) -> None:
+        """Larger files concatenate multiple blocks."""
+        first = _build_rows(self.LAYOUT, self.DEFAULTS, columns={"index": [1, 2], "step_index": [1, 1]})
+        second = _build_rows(self.LAYOUT, self.DEFAULTS, columns={"index": [3, 4, 5], "step_index": [1, 1, 1]})
+
+        def _section_header(main_begin: int, main_len: int, foot_end: int) -> bytearray:
+            buf = bytearray(1024)
+            buf[0:6] = b"NEWARE"
+            buf[82:90] = main_begin.to_bytes(8, "little")
+            buf[90:98] = main_len.to_bytes(8, "little")
+            # The last pointer of a header ends on the next header, or  EOF
+            buf[242:250] = foot_end.to_bytes(8, "little")
+            return buf
+
+        second_head = 2048 + len(first)
+        # The second block does not sit on the first block's record grid
+        second_begin = second_head + 1024
+        eof = second_begin + len(second)
+        summary = bytearray(1024)
+        summary[0:6] = b"NEWARE"
+        summary[90:98] = (len(first) + len(second)).to_bytes(8, "little")
+        buf = summary + _section_header(2048, len(first), second_head) + first
+        buf += _section_header(second_begin, len(second), eof) + second
+        mm = _make_mmap(bytes(buf))
+
+        assert nda._bts9_data_blocks(mm) == [(2048, len(first)), (second_begin, len(second))]
+        assert (second_begin - 2048) % 88 != 0, "blocks should be misaligned to exercise per-block grids"
+
+        df = nda._read_bts9_2(mm)
+
+        _assert_col(df, "index", [1, 2, 3, 4, 5])
+
+    def test_warns_when_chain_misses_records(self) -> None:
+        """A summary length larger than the chained blocks means records are unaccounted for."""
+        first = _build_rows(self.LAYOUT, self.DEFAULTS, columns={"index": [1, 2], "step_index": [1, 1]})
+        summary = bytearray(1024)
+        summary[0:6] = b"NEWARE"
+        summary[90:98] = (2 * len(first)).to_bytes(8, "little")
+        section = bytearray(1024)
+        section[0:6] = b"NEWARE"
+        section[82:90] = (2048).to_bytes(8, "little")
+        section[90:98] = len(first).to_bytes(8, "little")
+        section[242:250] = (2048 + len(first)).to_bytes(8, "little")
+        mm = _make_mmap(bytes(summary + section + first))
+
+        with pytest.warns(nda.UnverifiedFormatWarning, match="some records may be missing"):
+            blocks = nda._bts9_data_blocks(mm)
+
+        assert blocks == [(2048, len(first))]
+
+    def test_no_record_found_raises(self) -> None:
+        """A zero-length data block has no record to measure."""
+        mm = _make_mmap(bytes(200))
+
+        with pytest.raises(EOFError, match=r"matching record version 2"):
+            nda._bts9_record_len(mm, [(200, 0)])
+
+    def test_record_len_must_divide_every_block(self) -> None:
+        """A record length that leaves a partial record in another block is rejected."""
+        rows = _build_rows(self.LAYOUT, self.DEFAULTS, columns={"index": [1, 2], "step_index": [1, 1]})
+        record_len = len(rows) // 2
+        mm = _make_mmap(bytes(2048) + rows)
+
+        with pytest.raises(ValueError, match="does not divide every data block"):
+            nda._bts9_record_len(mm, [(2048, len(rows)), (2048, record_len + 1)])
+
 
 class TestReadNda13090:
-    """NDA file version 130, BTS9.0 sub-format."""
+    """NDA file versions 129 and 130, record version 2 struct."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("_pad1", "V4"),
@@ -1076,21 +1394,18 @@ class TestReadNda13090:
         ("step_time_s", "<u8"),
         ("voltage_V", "<f4"),
         ("current_mA", "<f4"),
-        ("_pad5", "V16"),
-        ("capacity_mAh", "<f4"),
-        ("energy_mWh", "<f4"),
+        ("_pad5", "V8"),
+        ("charge_capacity_mAh", "<f4"),
+        ("charge_energy_mWh", "<f4"),
+        ("discharge_capacity_mAh", "<f4"),
+        ("discharge_energy_mWh", "<f4"),
         ("unix_time_s", "<u8"),
         ("_pad6", "V12"),
     ]
     DEFAULTS: ClassVar[dict[str, int]] = {"identifier": 85}
-    MAGIC: ClassVar[bytes] = b"\x12\x50\x00\x07\x55\x81\x01\x06"
 
     def test_decodes_expected_values(self) -> None:
-        """Pack synthetic records and check every decoded column against hand-computed values.
-
-        Unlike the integer structs, sign lives directly in the raw float here
-        (no separate current-sign multiplication downstream).
-        """
+        """Pack synthetic records and check every decoded column against hand-computed values."""
         data = _build_rows(
             self.LAYOUT,
             self.DEFAULTS,
@@ -1101,31 +1416,33 @@ class TestReadNda13090:
                 "step_time_s": [10_000_000, 20_000_000],  # microseconds
                 "voltage_V": [3.6, 3.5],
                 "current_mA": [200.0, -150.0],
-                "capacity_mAh": [1800.0, -900.0],
-                "energy_mWh": [3600.0, -1800.0],
+                "charge_capacity_mAh": [1800.0, 0.0],
+                "charge_energy_mWh": [3600.0, 0.0],
+                "discharge_capacity_mAh": [0.0, 900.0],
+                "discharge_energy_mWh": [0.0, 1800.0],
                 "unix_time_s": [1_700_000_000_000_000, 1_700_000_010_000_000],
             },
         )
-        # Splice in the fixed magic bytes the reader searches for - the real
-        # pad1/identifier/pad2 bytes it expects at the very start of the data
-        # section, not reproducible via generic zero-filled padding.
-        data = self.MAGIC + data[len(self.MAGIC) :]
-        mm = _make_mmap(data)
+        header = bytearray(_header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True))
+        header[nda._BTS9_VERSION_AT : nda._BTS9_VERSION_AT + 2] = (2).to_bytes(2, "little")
+        mm = _make_mmap(bytes(header) + data)
 
-        df = nda._read_nda_130_90(mm)
+        df = nda._read_bts9(mm)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "step_time_s", [10.0, 20.0])
         _assert_col(df, "voltage_V", [3.6, 3.5])
         _assert_col(df, "current_mA", [200.0, -150.0])
-        _assert_col(df, "capacity_mAh", [0.5, -0.25])
-        _assert_col(df, "energy_mWh", [1.0, -0.5])
+        _assert_col(df, "charge_capacity_mAh", [0.5, 0.0])
+        _assert_col(df, "charge_energy_mWh", [1.0, 0.0])
+        _assert_col(df, "discharge_capacity_mAh", [0.0, 0.25])
+        _assert_col(df, "discharge_energy_mWh", [0.0, 0.5])
         _assert_col(df, "unix_time_s", [1700000000.0, 1700000010.0])
         _assert_col(df, "step_count", [1, 2])
 
 
 class TestReadNda13091:
-    """NDA file version 130, BTS9.1 sub-format NDA."""
+    """NDA file version 130, record version 19 struct."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u2"),
@@ -1168,16 +1485,17 @@ class TestReadNda13091:
         rec_a, rec_b = data[: self.RECORD_LEN], data[self.RECORD_LEN :]
         assert len(rec_a) == self.RECORD_LEN
         assert len(rec_b) == self.RECORD_LEN
-        buf = bytearray(1024) + bytearray(rec_a) + bytearray(rec_b)
+        header = _header_offset_preamble(pos_offset=82, main_begin=1024, main_len=len(data), pos64=True)
+        buf = bytearray(header) + bytearray(1024 - len(header)) + bytearray(rec_a) + bytearray(rec_b)
         mm = _make_mmap(bytes(buf))
 
         # Pre-check: the reader infers record_len by re-finding the 2-byte
-        # identifier starting at offset 1026. Confirm our synthetic bytes
+        # identifier after the first record. Confirm our synthetic bytes
         # don't produce a spurious earlier match before trusting the result.
         expected_second_record_pos = 1024 + self.RECORD_LEN
         assert mm.find(mm[1024:1026], 1026) == expected_second_record_pos
 
-        df = nda._read_nda_130_91(mm)
+        df = nda._read_bts9_19(mm)
 
         _assert_col(df, "index", [5, 6])
         _assert_col(df, "voltage_V", [3.6, 3.5])
@@ -1189,6 +1507,204 @@ class TestReadNda13091:
         _assert_col(df, "unix_time_s", [1700000000.0, 1700000010.0])
         _assert_col(df, "total_time_s", [10.0, 20.0])
         _assert_col(df, "step_count", [1, 2])
+
+
+class TestMergeAux:
+    """Joining decoded aux records onto the data rows."""
+
+    DATA: ClassVar[dict[str, list[int]]] = {"index": [1, 2]}
+
+    def test_multi_digit_channel_number(self) -> None:
+        """Channel numbers above 9 keep every digit in the merged column name."""
+        aux_df = pl.DataFrame(
+            {
+                "index": [1, 1],
+                "aux": [1, 12],
+                "aux_voltage_V": [3.3, 3.4],
+                "aux_temperature_degC": [25.1, 25.2],
+            }
+        )
+
+        df = nda._merge_aux(pl.DataFrame(self.DATA), aux_df)
+
+        assert set(df.columns) == {
+            "index",
+            "aux1_voltage_V",
+            "aux1_temperature_degC",
+            "aux12_voltage_V",
+            "aux12_temperature_degC",
+        }
+        _assert_col(df, "aux12_voltage_V", [3.4, None])
+
+    def test_single_measurement_column(self) -> None:
+        """One surviving measurement column is still named per channel."""
+        aux_df = pl.DataFrame(
+            {"index": [1, 2, 1, 2], "aux": [1, 1, 2, 2], "aux_temperature_degC": [1.0, 2.0, 3.0, 4.0]}
+        )
+
+        df = nda._merge_aux(pl.DataFrame(self.DATA), aux_df)
+
+        _assert_col(df, "aux1_temperature_degC", [1.0, 2.0])
+        _assert_col(df, "aux2_temperature_degC", [3.0, 4.0])
+
+    def test_no_measurement_columns(self) -> None:
+        """Aux records with every measurement dropped leave the data untouched."""
+        aux_df = pl.DataFrame({"index": [1, 2], "aux": [1, 1]})
+
+        df = nda._merge_aux(pl.DataFrame(self.DATA), aux_df)
+
+        assert df.columns == ["index"]
+
+    def test_empty_aux(self) -> None:
+        """An empty aux frame leaves the data untouched."""
+        df = nda._merge_aux(pl.DataFrame(self.DATA), pl.DataFrame(schema={"index": pl.UInt32}))
+
+        assert df.columns == ["index"]
+
+    def test_columns_grouped_by_channel(self) -> None:
+        """Merged columns come out in channel order, each channel's measurements together."""
+        aux_df = pl.DataFrame(
+            {
+                # Channels deliberately out of order in the records
+                "index": [1, 2, 1, 2, 1, 2],
+                "aux": [3, 3, 1, 1, 2, 2],
+                "aux_voltage_V": [3.3, 3.3, 3.1, 3.1, 3.2, 3.2],
+                "aux_temperature_degC": [25.3, 25.3, 25.1, 25.1, 25.2, 25.2],
+            }
+        )
+
+        df = nda._merge_aux(pl.DataFrame(self.DATA), aux_df)
+
+        assert df.columns == [
+            "index",
+            "aux1_voltage_V",
+            "aux1_temperature_degC",
+            "aux2_voltage_V",
+            "aux2_temperature_degC",
+            "aux3_voltage_V",
+            "aux3_temperature_degC",
+        ]
+        _assert_col(df, "aux3_voltage_V", [3.3, 3.3])
+
+    def test_aligned_single_channel_matches_the_pivot(self) -> None:
+        """The aligned shortcut gives the same frame as the pivot would."""
+        data = pl.DataFrame({"index": [1, 2, 3], "voltage_V": [3.6, 3.5, 3.4]})
+        aux_df = pl.DataFrame(
+            {
+                "index": [1, 2, 3],
+                "aux": [1, 1, 1],
+                "aux_voltage_V": [3.3, 3.35, 3.4],
+                "aux_temperature_degC": [25.1, 25.2, 25.3],
+            }
+        )
+
+        df = nda._merge_aux(data, aux_df)
+
+        assert df.columns == ["index", "voltage_V", "aux1_voltage_V", "aux1_temperature_degC"]
+        _assert_col(df, "aux1_voltage_V", [3.3, 3.35, 3.4])
+        _assert_col(df, "aux1_temperature_degC", [25.1, 25.2, 25.3])
+
+    def test_channel_number_kept_when_aligned(self) -> None:
+        """The shortcut names columns from the channel in the records, not from 1."""
+        data = pl.DataFrame({"index": [1, 2]})
+        aux_df = pl.DataFrame({"index": [1, 2], "aux": [4, 4], "aux_temperature_degC": [25.1, 25.2]})
+
+        df = nda._merge_aux(data, aux_df)
+
+        assert df.columns == ["index", "aux4_temperature_degC"]
+
+    def test_same_length_but_different_index_is_joined(self) -> None:
+        """Matching row counts alone do not mean the rows line up, so the join still runs."""
+        data = pl.DataFrame({"index": [1, 2, 3, 4]})
+        # Four aux records, but only covering two of the four data rows
+        aux_df = pl.DataFrame(
+            {
+                "index": [1, 1, 3, 3],
+                "aux": [1, 2, 1, 2],
+                "aux_temperature_degC": [25.1, 26.1, 25.3, 26.3],
+            }
+        )
+
+        df = nda._merge_aux(data, aux_df)
+
+        assert df.columns == ["index", "aux1_temperature_degC", "aux2_temperature_degC"]
+        _assert_col(df, "aux1_temperature_degC", [25.1, None, 25.3, None])
+        _assert_col(df, "aux2_temperature_degC", [26.1, None, 26.3, None])
+
+    def test_partial_aux_coverage_is_joined(self) -> None:
+        """Aux recorded for only some data rows leaves nulls on the rest."""
+        data = pl.DataFrame({"index": [1, 2, 3]})
+        aux_df = pl.DataFrame({"index": [1, 3], "aux": [1, 1], "aux_temperature_degC": [25.1, 25.3]})
+
+        df = nda._merge_aux(data, aux_df)
+
+        _assert_col(df, "aux1_temperature_degC", [25.1, None, 25.3])
+
+    def test_aux_without_channel_column(self) -> None:
+        """Aux records with no channel column join without renaming."""
+        aux_df = pl.DataFrame({"index": [1, 1, 2], "aux_temperature_degC": [25.1, 25.1, 25.2]})
+
+        df = nda._merge_aux(pl.DataFrame(self.DATA), aux_df)
+
+        _assert_col(df, "aux_temperature_degC", [25.1, 25.2])
+
+
+class TestDerivedUnixTime:
+    """unix_time_s derived from the test start time, for formats that do not record it."""
+
+    START_TIME = "2025-06-17 09:26:39"
+    START_TIME_S = datetime(2025, 6, 17, 9, 26, 39, tzinfo=timezone.utc).timestamp()
+
+    def _nda_1_mmap(self, start_time: str | None) -> mmap.mmap:
+        """Build an nda version 1 file whose two rows are 10 s and 20 s long."""
+        columns = {**TestReadNda1.COLUMNS, "step_time_s": [10, 20]}
+        data = _build_rows(TestReadNda1.LAYOUT, TestReadNda1.DEFAULTS, columns=columns)
+        header = _nda_1_29_header(
+            main_begin=114 + (_TEST_INFO_LEN_V1 if start_time else 0),
+            current_range=6000,
+            start_time=start_time,
+        )
+        return _make_mmap(header + data)
+
+    @pytest.mark.parametrize("start_time", ["2025-06-17 09:26:39", "2025.06.17 09:26:39"])
+    def test_start_time_formats(self, start_time: str) -> None:
+        """Both dash- and dot-separated start times parse to the same unix seconds."""
+        mm = self._nda_1_mmap(start_time)
+
+        assert nda._read_nda_start_time_s(mm, 1) == self.START_TIME_S
+
+    def test_unparseable_start_time(self) -> None:
+        """A start time in neither known format gives no start time."""
+        mm = self._nda_1_mmap("17/06/2025 09:26:39")
+
+        assert nda._read_nda_start_time_s(mm, 1) is None
+
+    def test_missing_test_info(self) -> None:
+        """A file with no test info record gives no start time."""
+        mm = self._nda_1_mmap(None)
+
+        assert nda._read_nda_start_time_s(mm, 1) is None
+
+    def test_unix_time_is_start_plus_total_time(self) -> None:
+        """unix_time_s is the start time plus the total elapsed test time."""
+        mm = self._nda_1_mmap(self.START_TIME)
+
+        df = nda._read_nda_1(mm)
+
+        _assert_col(df, "total_time_s", [10.0, 30.0])
+        _assert_col(df, "unix_time_s", [self.START_TIME_S + 10, self.START_TIME_S + 30], abs_tol=1e-3)
+
+    def test_no_start_time_leaves_unix_time_out(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Without a start time the reader logs and returns total_time_s only."""
+        mm = self._nda_1_mmap(None)
+
+        caplog.set_level(logging.INFO, logger="fastnda.nda")
+
+        df = nda._read_nda_1(mm)
+
+        assert "unix_time_s" not in df.columns
+        _assert_col(df, "total_time_s", [10.0, 30.0])
+        assert "No test start time found" in caplog.text
 
 
 class TestUnverifiedFormatWarning:
