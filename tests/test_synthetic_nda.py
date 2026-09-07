@@ -1278,7 +1278,7 @@ class TestReadNda129:
         header = _header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True)
         mm = _make_mmap(header + data)
 
-        df = nda._read_nda_129(mm)
+        df = nda._read_bts9_2(mm)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "step_time_s", [10.5, 20.25])
@@ -1297,7 +1297,7 @@ class TestReadNda129:
         header = _header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True)
         mm = _make_mmap(header + data)
 
-        df = nda._read_nda_129(mm)
+        df = nda._read_bts9_2(mm)
 
         _assert_col(df, "index", [1])
 
@@ -1308,7 +1308,7 @@ class TestReadNda129:
         trailing = bytes(40) + bytes(4) + bytes([85]) + bytes(100)
         mm = _make_mmap(header + data + trailing)
 
-        df = nda._read_nda_129(mm)
+        df = nda._read_bts9_2(mm)
 
         _assert_col(df, "index", [1])
 
@@ -1340,7 +1340,7 @@ class TestReadNda129:
         assert nda._bts9_data_blocks(mm) == [(2048, len(first)), (second_begin, len(second))]
         assert (second_begin - 2048) % 88 != 0, "blocks should be misaligned to exercise per-block grids"
 
-        df = nda._read_nda_129(mm)
+        df = nda._read_bts9_2(mm)
 
         _assert_col(df, "index", [1, 2, 3, 4, 5])
 
@@ -1366,7 +1366,7 @@ class TestReadNda129:
         """A zero-length data block has no record to measure."""
         mm = _make_mmap(bytes(200))
 
-        with pytest.raises(EOFError, match=r"Could not find a BTS9.0 record"):
+        with pytest.raises(EOFError, match=r"matching record version 2"):
             nda._bts9_record_len(mm, [(200, 0)])
 
     def test_record_len_must_divide_every_block(self) -> None:
@@ -1380,7 +1380,7 @@ class TestReadNda129:
 
 
 class TestReadNda13090:
-    """NDA file version 130, BTS9.0 sub-format."""
+    """NDA file versions 129 and 130, record version 2 struct."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("_pad1", "V4"),
@@ -1423,10 +1423,11 @@ class TestReadNda13090:
                 "unix_time_s": [1_700_000_000_000_000, 1_700_000_010_000_000],
             },
         )
-        header = _header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True)
-        mm = _make_mmap(header + data)
+        header = bytearray(_header_offset_preamble(pos_offset=82, main_begin=98, main_len=len(data), pos64=True))
+        header[nda._BTS9_VERSION_AT : nda._BTS9_VERSION_AT + 2] = (2).to_bytes(2, "little")
+        mm = _make_mmap(bytes(header) + data)
 
-        df = nda._read_nda_130(mm)
+        df = nda._read_bts9(mm)
 
         _assert_col(df, "index", [1, 2])
         _assert_col(df, "step_time_s", [10.0, 20.0])
@@ -1441,7 +1442,7 @@ class TestReadNda13090:
 
 
 class TestReadNda13091:
-    """NDA file version 130, BTS9.1 sub-format NDA."""
+    """NDA file version 130, record version 19 struct."""
 
     LAYOUT: ClassVar[list[tuple[str, str]]] = [
         ("identifier", "<u2"),
@@ -1494,7 +1495,7 @@ class TestReadNda13091:
         expected_second_record_pos = 1024 + self.RECORD_LEN
         assert mm.find(mm[1024:1026], 1026) == expected_second_record_pos
 
-        df = nda._read_nda_130_91(mm)
+        df = nda._read_bts9_19(mm)
 
         _assert_col(df, "index", [5, 6])
         _assert_col(df, "voltage_V", [3.6, 3.5])

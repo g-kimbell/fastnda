@@ -164,13 +164,13 @@ def _read_nda_version_info(mm: mmap.mmap) -> dict[str, str]:
 # BTS9 (nda versions 129, 130)
 # Reads from 'pack test info' record
 #
-# The record is a versioned struct: u16 swjVer, u16 record length, then either a field
-# presence mask (swjVer < 8) or a fixed schema (swjVer >= 8).
+# The record is a versioned struct: u16 record version, u16 record length, then either a field
+# presence mask (below version 8) or a fixed schema (version 8 and newer).
 # Seems to always end with test_id, timestamps and usually num_datapoints
 # Older files then have a chain of Pascal strings
 
-# swjVer at or above this uses the newer record layout
-_SWJ_VER_NEW_LAYOUT = 8
+# Record versions at or above this use the newer layout
+_BTS9_VERSION_NEW_LAYOUT = 8
 
 # Tail fields, offsets relative to the start of the tail.
 # The count sits after the timestamps in the old layout and before them in the new one.
@@ -198,7 +198,7 @@ _OLD_TAIL_LEN = 20
 _COUNT_LEN = 4
 _NO_COUNT_LEN = 1
 
-# swjVer < 8 records start with the two fields that describe the rest of the record
+# Records below version 8 start with the two fields that describe the rest of the record
 _HEADER_OLD: dict[str, tuple[int, str]] = {
     "UNKNOWN_19": (4, "u32"),  # the field presence mask
     "UNKNOWN_5": (8, "u32"),
@@ -217,7 +217,7 @@ _BLOCK_BITS: dict[int, str] = {
 # Set when the tail carries num_datapoints, clear on the 2013-era builds that omit it
 _COUNT_BIT = 30
 
-# swjVer >= 8 has no mask, so its fields sit at fixed offsets and the tail is per schema version
+# Version 8 and newer has no mask, so its fields sit at fixed offsets, tail offset per version
 _FIELDS_NEW: dict[str, tuple[int, str]] = {
     "start_step_id": (4, "u32"),
     "creator": (8, "text32"),
@@ -282,7 +282,7 @@ def _decode_pstring(data: bytes, pos: int) -> tuple[str, int]:
 
 
 def _read_pack_test_info_chain(record: bytes, pos: int, *, counted: bool) -> dict[str, str]:
-    """Read the Pascal-string chain that ends a swjVer < 8 record.
+    """Read the Pascal-string chain that ends a record below record version 8.
 
     The two label strings are separated by a u32 on builds that also carry num_datapoints;
     builds without the count run the labels together instead.
@@ -323,7 +323,7 @@ def _old_blocks(mask: int) -> dict[str, int]:
 
 
 def _search_old_tail(record: bytes) -> tuple[int, bool] | None:
-    """Locate the tail of a swjVer < 8 record the mask does not describe.
+    """Locate the tail of a record below record version 8 that the mask does not describe.
 
     Returns the tail offset and whether num_datapoints is present, taking the gap between
     the timestamps and the string chain as the deciding evidence.
@@ -340,7 +340,7 @@ def _search_old_tail(record: bytes) -> tuple[int, bool] | None:
 
 
 def _read_pack_test_info_old(record: bytes) -> dict[str, str | int]:
-    """Read a swjVer < 8 pack test info record, laid out by its field presence mask."""
+    """Read a pack test info record below record version 8, laid out by its field presence mask."""
     mask = int.from_bytes(record[4:8], "little")
     blocks = _old_blocks(mask)
     tail = _BLOCKS_AT + _BLOCK_LEN * len(blocks)
@@ -365,11 +365,11 @@ def _read_pack_test_info_old(record: bytes) -> dict[str, str | int]:
 
 
 def _read_pack_test_info_new(record: bytes) -> dict[str, str | int]:
-    """Read a swjVer >= 8 pack test info record, whose tail offset is per schema version."""
-    swj_ver = int.from_bytes(record[0:2], "little")
-    tail = _NEW_TAIL_AT.get(swj_ver)
+    """Read a pack test info record at record version 8 or newer, whose tail offset is per version."""
+    bts9_version = int.from_bytes(record[0:2], "little")
+    tail = _NEW_TAIL_AT.get(bts9_version)
     if tail is None or not _is_timestamp_pair(record, tail + _NEW_TIMES_AT):
-        logger.info("Unknown pack test info schema swjVer %d, searching for the tail.", swj_ver)
+        logger.info("Unknown pack test info record version %d, searching for the tail.", bts9_version)
         pair_pos = _find_timestamp_pair(record)
         if pair_pos is None:
             return {}
@@ -389,8 +389,8 @@ def _read_bts9_test_info(mm: mmap.mmap) -> dict[str, str | int]:
     if not test_begin or not test_len:
         return {}
     record = mm[test_begin : test_begin + test_len]
-    swj_ver = int.from_bytes(record[0:2], "little")
-    if swj_ver < _SWJ_VER_NEW_LAYOUT:
+    bts9_version = int.from_bytes(record[0:2], "little")
+    if bts9_version < _BTS9_VERSION_NEW_LAYOUT:
         return _read_pack_test_info_old(record)
     return _read_pack_test_info_new(record)
 

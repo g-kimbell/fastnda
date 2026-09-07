@@ -49,7 +49,7 @@ class TestMissing:
             read_nda_metadata(file)
         with file.open("wb") as f:
             f.write(b"NEWARE" + b"\x00" * 8 + b"\x82" + 1024 * b"\x00")
-        with pytest.raises(NotImplementedError, match=r"does not match BTS9.0 or BTS9.1"):
+        with pytest.raises(NotImplementedError, match=r"does not match a known BTS9 record struct"):
             read_nda(file)
         with file.open("rb") as f:
             mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)

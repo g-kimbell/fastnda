@@ -780,8 +780,12 @@ def _read_nda_29(mm: mmap.mmap) -> pl.DataFrame:
     return _merge_aux(data_df, aux_df)
 
 
-# Identifier byte in record, pos 4 in BTS9.0, pos 0 in BTS9.1
+# Identifier byte in record, pos 4 at record version 2, pos 0 at record version 19
 _BTS9_IDENTIFIER = 85
+
+# BTS9 record version (swjVer)
+_BTS9_VERSION_AT = 16
+_CONFIRMED_BTS9_VERSIONS = frozenset({2, 3, 19})
 
 
 def _bts9_data_blocks(mm: mmap.mmap) -> list[tuple[int, int]]:
@@ -820,7 +824,7 @@ def _bts9_data_blocks(mm: mmap.mmap) -> list[tuple[int, int]]:
 
 
 def _bts9_record_len(mm: mmap.mmap, blocks: list[tuple[int, int]]) -> int:
-    """Guess the BTS9.0 record length, which is not recorded in the header."""
+    """Guess the record length at record version 2, which is not held in the header."""
     begin, first_len = blocks[0]
     block_end = begin + first_len if first_len else len(mm)
     # Records open with a constant 4-byte tag (maybe device type?) followed by an identifier
@@ -829,11 +833,11 @@ def _bts9_record_len(mm: mmap.mmap, blocks: list[tuple[int, int]]) -> int:
     # If no next record, it is one record
     record_len = next_record - begin if next_record != -1 else block_end - begin
     if record_len <= 0:
-        msg = f"Could not find a BTS9.0 record at {begin}."
+        msg = f"Could not find a record at {begin} matching record version 2."
         raise EOFError(msg)
     # Correct length should integer divide every data block
     if any(length % record_len for _, length in blocks):
-        msg = f"BTS9.0 record length {record_len} does not divide every data block."
+        msg = f"Record length {record_len} at record version 2 does not divide every data block."
         raise ValueError(msg)
     return record_len
 
@@ -853,8 +857,8 @@ def _df_from_blocks(
     return pl.concat(dfs, how="vertical", rechunk=False)
 
 
-def _read_nda_129(mm: mmap.mmap) -> pl.DataFrame:
-    """Read the data blocks shared by nda 129 and nda 130 BTS9.0."""
+def _read_bts9_2(mm: mmap.mmap) -> pl.DataFrame:
+    """Read BTS9 file version 2."""
     blocks = _bts9_data_blocks(mm)
     record_len = _bts9_record_len(mm, blocks)
     dtype = np.dtype(
@@ -892,20 +896,44 @@ def _read_nda_129(mm: mmap.mmap) -> pl.DataFrame:
     )
 
 
-def _read_nda_130(mm: mmap.mmap) -> pl.DataFrame:
-    """Figure out whether BTS9.0 or BTS9.1 and pass to correct function."""
+def _bts9_probe_reader(mm: mmap.mmap) -> Callable[[mmap.mmap], pl.DataFrame]:
+    """Pick a BTS9 reader from where the identifier byte sits in the first record."""
     begin = _bts9_data_blocks(mm)[0][0]
-    # Both carry identifier 85, at byte 4 of a BTS9.0 record and byte 0 of a BTS9.1 record
     if mm[begin + 4] == _BTS9_IDENTIFIER:
-        return _read_nda_129(mm)
+        return _read_bts9_2
     if mm[begin] == _BTS9_IDENTIFIER:
-        return _read_nda_130_91(mm)
-    msg = f"nda 130 data block at {begin} does not match BTS9.0 or BTS9.1"
+        return _read_bts9_19
+    msg = f"nda 130 data block at {begin} does not match a known BTS9 record struct"
     raise NotImplementedError(msg)
 
 
-def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
-    """Read nda version 130 BTS9.1."""
+def _bts9_reader(mm: mmap.mmap) -> Callable[[mmap.mmap], pl.DataFrame]:
+    """Pick the BTS9 record reader from the record version in the header."""
+    bts9_version = int.from_bytes(mm[_BTS9_VERSION_AT : _BTS9_VERSION_AT + 2], "little")
+    reader = _BTS9_READERS.get(bts9_version)
+    if bts9_version not in _CONFIRMED_BTS9_VERSIONS:
+        detail = (
+            "has not been checked against a vendor export"
+            if reader is not None
+            else "has not been seen before, so the record layout is a guess"
+        )
+        warnings.warn(
+            f"BTS9 record version {bts9_version} {detail} - results may be incorrect. If you can, please "
+            "share a sample file at https://github.com/empaeconversion/fastnda/issues "
+            "so we can confirm this format.",
+            UnverifiedFormatWarning,
+            stacklevel=3,
+        )
+    return reader if reader is not None else _bts9_probe_reader(mm)
+
+
+def _read_bts9(mm: mmap.mmap) -> pl.DataFrame:
+    """Read an nda version 129 or 130 file, with the struct its record version calls for."""
+    return _bts9_reader(mm)(mm)
+
+
+def _read_bts9_19(mm: mmap.mmap) -> pl.DataFrame:
+    """Read the record struct introduced at record version 19, used by nda 130."""
     # Search forward from the first record for the next identifier to get the record length
     blocks = _bts9_data_blocks(mm)
     begin = blocks[0][0]
@@ -913,7 +941,7 @@ def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
     identifier_int = int.from_bytes(identifier_bytes, byteorder="little", signed=False)
     record_len = mm.find(identifier_bytes, begin + 2) - begin
 
-    # In BTS9.1, data and aux are in the same rows
+    # In this struct, data and aux are in the same rows
     dtype_list = [
         ("identifier", "<u2"),
         ("step_index", "<u1"),
@@ -966,7 +994,7 @@ def _read_nda_130_91(mm: mmap.mmap) -> pl.DataFrame:
 # NDA FileVer code -> struct type reader
 _NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
     1: _read_nda_1,
-    2: _read_nda_2,  # Deprecated by Neware
+    2: _read_nda_2,
     3: _read_nda_3,
     4: _read_nda_3,
     5: _read_nda_5,
@@ -985,7 +1013,7 @@ _NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
     18: _read_nda_11,
     19: _read_nda_19,
     20: _read_nda_14,
-    # 21: Missing in Neware
+    # 21: Missing
     22: _read_nda_14,
     23: _read_nda_14,
     24: _read_nda_14,
@@ -994,12 +1022,20 @@ _NDA_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
     27: _read_nda_25,
     28: _read_nda_29,
     29: _read_nda_29,
-    129: _read_nda_129,  # Deprecated by Neware
-    130: _read_nda_130,  # Variable length
+    129: _read_bts9,
+    130: _read_bts9,
+}
+
+# Record version -> struct type reader, named for the lowest version using that struct
+_BTS9_READERS: dict[int, Callable[[mmap.mmap], pl.DataFrame]] = {
+    2: _read_bts9_2,
+    3: _read_bts9_2,
+    19: _read_bts9_19,
+    42: _read_bts9_19,
 }
 
 # Reader functions confirmed against real data
-_CONFIRMED_READER_NAMES = frozenset({"_read_nda_5", "_read_nda_14", "_read_nda_29", "_read_nda_130"})
+_CONFIRMED_READER_NAMES = frozenset({"_read_nda_5", "_read_nda_14", "_read_nda_29", "_read_bts9"})
 _CONFIRMED_NDA_VERSIONS = frozenset(
     version for version, reader in _NDA_READERS.items() if reader.__name__ in _CONFIRMED_READER_NAMES
 )
