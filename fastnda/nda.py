@@ -805,6 +805,9 @@ def _bts9_data_blocks(mm: mmap.mmap) -> list[tuple[int, int]]:
         # A header's last pointer ends on the next header or EOF
         foot_begin, foot_length = _nda_head_main(mm, pos_offset=head + 242, pos64=True)
         head = foot_begin + foot_length
+    if not blocks:
+        msg = "BTS9 header contains no data blocks."
+        raise EOFError(msg)
     chained_length = sum(length for _, length in blocks)
     if chained_length != total_length:
         warnings.warn(

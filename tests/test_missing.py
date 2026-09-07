@@ -56,6 +56,17 @@ class TestMissing:
         with pytest.raises(EOFError):
             _read_nda_29(mm)
 
+    def test_bts9_empty_block_chain(self, tmp_path: Path) -> None:
+        """A BTS9 header chain whose blocks are all zero length is rejected."""
+        file = tmp_path / "empty-chain.nda"
+        header = bytearray(2048)
+        header[0:6] = b"NEWARE"
+        header[14] = 130
+        header[1024:1030] = b"NEWARE"
+        file.write_bytes(bytes(header))
+        with pytest.raises(EOFError, match="no data blocks"):
+            read_nda(file)
+
     def test_missing_test_info(self) -> None:
         """Zeroed test info pointers give empty metadata."""
         mm = mmap.mmap(-1, 2048)
